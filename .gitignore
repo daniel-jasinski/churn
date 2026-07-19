@@ -1,0 +1,17 @@
+# Workspace data directories (event logs are user data, never source)
+*.db
+*.db-wal
+*.db-shm
+churn.lock
+/workspace/
+
+# Build artifacts
+/churn.exe
+/dist/
+
+# Frontend
+node_modules/
+
+# Editor/OS noise
+.DS_Store
+Thumbs.db
