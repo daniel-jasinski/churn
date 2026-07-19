@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
+	"strings"
 	"time"
 
 	"churn/internal/interchange"
@@ -18,11 +20,15 @@ import (
 )
 
 // cmdServe opens the workspace (lock, replay, writer) and serves the HTTP
-// API until ctx is cancelled. M4 exposes the health endpoint only; the
-// server package is the seam M5 fills in.
+// API (§5.1) until ctx is cancelled. The actor stamped on every write comes
+// from --actor (default: OS username) — phase 3 replaces this with
+// server-side sessions (§6). Shutdown is graceful: SSE streams are ended,
+// then in-flight requests drain (up to 5s).
 func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs, data := newFlagSet("serve", "serve --data <dir> [--listen <addr>]", stderr)
+	fs, data := newFlagSet("serve", "serve --data <dir> [--listen <addr>] [--actor <name>] [--verbose]", stderr)
 	listen := fs.String("listen", "127.0.0.1:8080", "address to listen on")
+	actor := fs.String("actor", "", "actor stamped on every write (default: OS username)")
+	verbose := fs.Bool("verbose", false, "log every request (method, path, status, duration) to stderr")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -30,13 +36,16 @@ func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	if err != nil {
 		return err
 	}
+	if *actor == "" {
+		*actor = defaultActor()
+	}
 
 	st, err := openWorkspace(dir)
 	if err != nil {
 		return err
 	}
 	defer st.Close()
-	w, err := writer.Open(st, writer.Options{})
+	w, err := writer.Open(st, writer.Options{Actor: *actor})
 	if err != nil {
 		return err
 	}
@@ -48,12 +57,17 @@ func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	}
 	fmt.Fprintf(stdout, "churn: workspace %s: listening on http://%s\n",
 		w.Projection().WorkspaceID, ln.Addr())
+	fmt.Fprintf(stdout, "churn: acting as %s\n", *actor)
 
-	srv := &http.Server{Handler: server.New(w).Handler()}
+	api := server.New(w, st, server.Options{
+		DataDir: dir, Actor: *actor, Verbose: *verbose, LogWriter: stderr,
+	})
+	srv := &http.Server{Handler: api.Handler()}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	select {
 	case <-ctx.Done():
+		api.Shutdown() // end SSE streams so the drain below can complete
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutCtx); err != nil {
@@ -64,6 +78,23 @@ func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	case err := <-errc:
 		return fmt.Errorf("serve: %w", err)
 	}
+}
+
+// defaultActor is the fallback --actor value: the OS username (domain
+// qualifiers stripped on Windows), or "local" when even that is unknown.
+func defaultActor() string {
+	u, err := user.Current()
+	if err != nil || u.Username == "" {
+		return "local"
+	}
+	name := u.Username
+	if i := strings.LastIndexAny(name, `\/`); i >= 0 {
+		name = name[i+1:]
+	}
+	if name == "" {
+		return "local"
+	}
+	return name
 }
 
 // cmdExportLog streams the log as canonical JSONL to stdout or --out. It

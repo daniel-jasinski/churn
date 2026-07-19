@@ -159,6 +159,42 @@ func (p *Projection) ProposeAllocations(thing string) (proposal []ProposedAlloca
 	return proposal, true
 }
 
+// ReproposeAllocations computes the replacement allocation set for the §2.5
+// atomic re-propose of an ACTIVE thing: a feasible matching of its CURRENT
+// requirements onto the units that would be free if the thing's own open
+// allocations were closed — which is exactly the state the one-batch
+// close+reopen commits into. ok is false when no feasible replacement exists.
+// Deterministic under the match tie-break, like ProposeAllocations.
+func (p *Projection) ReproposeAllocations(thing string) (proposal []ProposedAllocation, ok bool) {
+	// Free units with the thing's own open allocations excluded from the
+	// allocated totals (clamped at zero AFTER the exclusion, so a §2.5
+	// over-allocated resource frees up exactly what the close releases).
+	allocated := map[string]int{}
+	for _, al := range p.Allocations {
+		if al.Open && al.Thing != thing {
+			allocated[al.Resource] += al.Quantity
+		}
+	}
+	free := make([]match.Resource, 0, len(p.Resources))
+	for _, id := range sortedKeys(p.Resources) {
+		rs := p.Resources[id]
+		f := rs.EffectiveCapacity() - allocated[id]
+		if f < 0 {
+			f = 0
+		}
+		free = append(free, match.Resource{ID: id, Free: f, Capabilities: rs.Capabilities})
+	}
+	asg, ok := match.Feasible(p.MatchRequirementsOf(thing), free)
+	if !ok {
+		return nil, false
+	}
+	proposal = make([]ProposedAllocation, len(asg))
+	for i, a := range asg {
+		proposal[i] = ProposedAllocation{Requirement: a.Requirement, Resource: a.Resource, Quantity: a.Units}
+	}
+	return proposal, true
+}
+
 // ── dependency satisfaction (§2.1/§2.2) ──
 
 // edgeVerdict is THE implementation of the §2.1 edge rule, shared by the

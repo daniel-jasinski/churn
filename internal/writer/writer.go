@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -95,6 +96,7 @@ type Writer struct {
 	appendBatch func([]event.Envelope, []store.Ref) ([]event.Envelope, error)
 
 	proj atomic.Pointer[domain.Projection]
+	hook atomic.Pointer[func(CommitInfo)]
 
 	// origin and lastTS belong to the writer goroutine (and to Open before
 	// the goroutine starts); they are never touched concurrently.
@@ -236,6 +238,28 @@ func (w *Writer) Submit(actor string, cmds []Command, expected map[string]int64)
 	return resp.events, resp.err
 }
 
+// CommitInfo describes one committed batch, for the commit hook: the batch
+// id, the seq of its last event, the batch commit timestamp, and the sorted,
+// de-duplicated event types it contained.
+type CommitInfo struct {
+	Batch string
+	Seq   int64
+	TS    string
+	Types []string
+}
+
+// SetCommitHook installs fn to be called synchronously after each batch
+// committed from then on is published. fn runs on the writer goroutine and
+// must not block; a nil fn removes the hook. This is the phase-3 SSE seam
+// (DESIGN.md §6) — the one point where "the world changed" is known.
+func (w *Writer) SetCommitHook(fn func(CommitInfo)) {
+	if fn == nil {
+		w.hook.Store(nil)
+		return
+	}
+	w.hook.Store(&fn)
+}
+
 // Close stops the writer goroutine. It does not close the store.
 func (w *Writer) Close() {
 	close(w.quit)
@@ -363,6 +387,23 @@ func (w *Writer) append(actor string, cmds []Command, expected map[string]int64)
 	}
 	w.lastTS = ts
 	w.proj.Store(cand)
+	if h := w.hook.Load(); h != nil {
+		types := make([]string, 0, len(committed))
+		seen := map[string]struct{}{}
+		for _, ev := range committed {
+			if _, dup := seen[ev.Type]; !dup {
+				seen[ev.Type] = struct{}{}
+				types = append(types, ev.Type)
+			}
+		}
+		sort.Strings(types)
+		(*h)(CommitInfo{
+			Batch: committed[0].Batch,
+			Seq:   committed[len(committed)-1].Seq,
+			TS:    ts,
+			Types: types,
+		})
+	}
 	return committed, nil
 }
 
