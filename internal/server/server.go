@@ -69,6 +69,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -195,7 +196,21 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("/api/v1/test/"+name, h)
 	}
 
-	var h http.Handler = mux
+	// Embedded frontend (M6): every non-/api path serves the SPA bundle.
+	// The split is explicit — NOT a mux "/" registration — so the mux keeps
+	// producing its 404/405 (with Allow) for /api paths, which jsonErrors
+	// below rewrites into the envelope; the SPA fallback can never shadow an
+	// API error.
+	static := s.staticHandler()
+	root := http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+			mux.ServeHTTP(rw, r)
+			return
+		}
+		static.ServeHTTP(rw, r)
+	})
+
+	var h http.Handler = root
 	h = s.limitBody(h)
 	h = jsonErrors(h)
 	if s.verbose {

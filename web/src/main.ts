@@ -1,0 +1,118 @@
+// main.ts — boot: layout shell, routing, store wiring, keyboard shortcuts.
+
+import './styles.css';
+import { h } from './dom';
+import { current, onRoute, navigate, Route } from './router';
+import { store } from './store';
+import { openAsOfPicker } from './ui/asof';
+import { renderBottlenecks } from './views/bottlenecks';
+import { renderGraph } from './views/graph';
+import { renderHistory } from './views/history';
+import { renderReady } from './views/ready';
+import { renderResources } from './views/resources';
+import { renderSettings } from './views/settings';
+import { renderTree } from './views/tree';
+import { renderVocab } from './views/vocab';
+
+const NAV: [string, string, string][] = [
+  ['ready', 'Ready', 'g r'],
+  ['graph', 'Graph', 'g g'],
+  ['resources', 'Resources', 'g s'],
+  ['bottlenecks', 'Bottlenecks', 'g b'],
+  ['tree', 'Tree', 'g t'],
+  ['vocab', 'Vocab', 'g v'],
+  ['history', 'History', 'g h'],
+  ['settings', 'Weights', 'g w'],
+];
+
+const app = document.getElementById('app')!;
+const banner = h('div', { class: 'asof-banner', id: 'asof-banner' });
+const topbar = h('header', { class: 'topbar' });
+const view = h('main', { class: 'view', id: 'view' });
+app.replaceChildren(topbar, banner, view);
+
+function renderTopbar(): void {
+  const r = current();
+  topbar.replaceChildren(
+    h('span', { class: 'brand' }, 'churn'),
+    h('nav', null, ...NAV.map(([name, label, key]) =>
+      h('a', {
+        href: `#/${name}`,
+        class: r.name === name ? 'active' : '',
+        title: `${label} (${key})`,
+      }, label))),
+    h('span', { class: 'spacer' }),
+    h('span', {
+      class: 'live ' + (store.live ? 'live-on' : 'live-off'),
+      title: store.live ? 'live: SSE commit stream connected' : 'polling every 10s (SSE unavailable)',
+    }, store.live ? '● live' : '○ polling'),
+    store.workspace
+      ? h('span', { class: 'muted tiny', title: `workspace ${store.workspace.workspace_id}` },
+        `seq ${store.workspace.last_seq}`)
+      : null);
+}
+
+function renderBanner(): void {
+  if (!store.asOf) {
+    banner.replaceChildren();
+    banner.classList.remove('on');
+    return;
+  }
+  banner.classList.add('on');
+  banner.replaceChildren(
+    h('span', null, `🕰 Viewing the past (as of ${store.asOf}) — read-only. `,
+      h('span', { class: 'muted' }, 'Graph and tree show the past; other screens show the present. All mutations are disabled.')),
+    h('button', { class: 'btn btn-sm', onclick: () => { store.setAsOf(null); render(); } }, 'Return to now'));
+}
+
+function render(): void {
+  const r: Route = current();
+  renderTopbar();
+  renderBanner();
+  if (!store.loaded) {
+    view.replaceChildren(h('div', { class: 'empty' }, 'Connecting to the workspace…'));
+    return;
+  }
+  switch (r.name) {
+    case 'ready': renderReady(view); break;
+    case 'graph': renderGraph(view, r.arg); break;
+    case 'resources': renderResources(view); break;
+    case 'bottlenecks': renderBottlenecks(view); break;
+    case 'tree': renderTree(view); break;
+    case 'vocab': renderVocab(view); break;
+    case 'history': renderHistory(view, r.arg); break;
+    case 'settings': renderSettings(view); break;
+  }
+}
+
+// keyboard: '/' focuses the filter, 'g' + letter navigates, 't' time travel
+let gPending = false;
+document.addEventListener('keydown', (e) => {
+  const el = e.target as HTMLElement;
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return;
+  if (e.key === '/') {
+    const search = document.querySelector<HTMLInputElement>('input[data-hotkey="slash"]');
+    if (search) { e.preventDefault(); search.focus(); }
+    return;
+  }
+  if (gPending) {
+    gPending = false;
+    const map: Record<string, string> = {
+      r: 'ready', g: 'graph', s: 'resources', b: 'bottlenecks',
+      t: 'tree', v: 'vocab', h: 'history', w: 'settings',
+    };
+    const dest = map[e.key];
+    if (dest) { e.preventDefault(); navigate(dest); }
+    return;
+  }
+  if (e.key === 'g') { gPending = true; setTimeout(() => { gPending = false; }, 800); return; }
+  if (e.key === 'T' && e.shiftKey) openAsOfPicker();
+});
+
+onRoute(render);
+store.subscribe(render);
+store.start();
+render();
+
+// debug hook (console poking; nothing in the app reads it)
+(window as unknown as Record<string, unknown>)['__store'] = store;
