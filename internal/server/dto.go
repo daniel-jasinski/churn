@@ -122,15 +122,6 @@ type capabilityDTO struct {
 	Version     int64  `json:"version"`
 }
 
-type allocationDTO struct {
-	ID          string `json:"id"`
-	Thing       string `json:"thing"`
-	Resource    string `json:"resource"`
-	Requirement string `json:"requirement"`
-	Quantity    int    `json:"quantity"`
-	Open        bool   `json:"open"`
-}
-
 type workspaceCounts struct {
 	Projects          int `json:"projects"`
 	Things            int `json:"things"`
@@ -256,12 +247,6 @@ func buildTypeDTO(p *domain.Projection, id string) typeDTO {
 func buildCapabilityDTO(p *domain.Projection, id string) capabilityDTO {
 	c := p.Capabilities[id]
 	return capabilityDTO{ID: id, Name: c.Name, Description: c.Description, Version: p.Version(id)}
-}
-
-func buildAllocationDTO(p *domain.Projection, id string) allocationDTO {
-	al := p.Allocations[id]
-	return allocationDTO{ID: id, Thing: al.Thing, Resource: al.Resource,
-		Requirement: al.Requirement, Quantity: al.Quantity, Open: al.Open}
 }
 
 // matchReqDTO is the wire form of a match.Requirement (analytics payloads).

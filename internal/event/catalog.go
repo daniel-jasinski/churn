@@ -9,6 +9,7 @@
 // suffix format is deliberately not validated so readers stay permissive).
 // The envelope's entity column carries the id of the entity an event is
 // about; payloads never repeat it.
+
 package event
 
 import (

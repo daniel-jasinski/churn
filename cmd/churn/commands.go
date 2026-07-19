@@ -44,7 +44,7 @@ func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	if err != nil {
 		return err
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 	w, err := writer.Open(st, writer.Options{Actor: *actor})
 	if err != nil {
 		return err
@@ -115,7 +115,7 @@ func cmdExportLog(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 
 	dst := stdout
 	var f *os.File
@@ -135,7 +135,7 @@ func cmdExportLog(args []string, stdout, stderr io.Writer) error {
 			err = cerr
 		}
 		if err != nil {
-			os.Remove(*out) // do not leave a truncated export behind
+			_ = os.Remove(*out) // do not leave a truncated export behind
 		}
 	}
 	return err
@@ -163,7 +163,7 @@ func cmdImportLog(args []string, stdin io.Reader, stdout, stderr io.Writer) erro
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }() // input file, opened read-only
 		src = f
 	}
 	events, batches, err := interchange.Import(dir, src)
@@ -194,7 +194,7 @@ func cmdBackup(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 	if err := st.Backup(fs.Arg(0)); err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func cmdReindex(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 	n, err := st.Reindex()
 	if err != nil {
 		return err

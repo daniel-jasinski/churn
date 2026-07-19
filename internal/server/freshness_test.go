@@ -34,10 +34,7 @@ func TestFrontendBuildFreshness(t *testing.T) {
 		t.Fatalf("embedded dist/.buildstamp missing — run `node web/build.mjs` and commit dist/: %v", err)
 	}
 
-	var files []string
-	for _, f := range []string{"build.mjs", "package.json", "package-lock.json", "tsconfig.json"} {
-		files = append(files, f)
-	}
+	files := []string{"build.mjs", "package.json", "package-lock.json", "tsconfig.json"}
 	err = filepath.WalkDir(filepath.Join(webDir, "src"), func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err

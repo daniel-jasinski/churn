@@ -16,6 +16,7 @@
 // Every static response carries X-Content-Type-Options: nosniff and a
 // self-only Content-Security-Policy (data: images allowed for the inline
 // favicon; all styling is CSSOM/external, so no 'unsafe-inline').
+
 package server
 
 import (

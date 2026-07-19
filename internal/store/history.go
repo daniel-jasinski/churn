@@ -77,7 +77,7 @@ func (s *Store) History(f HistoryFilter, fn func(event.Envelope) error) error {
 	if err != nil {
 		return fmt.Errorf("store: history: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var ev event.Envelope
 		var causes, entity sql.NullString

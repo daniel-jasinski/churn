@@ -124,12 +124,12 @@ func (f *settingsFile) save(s analytics.Settings) *apiError {
 	}
 	tmp := f.path + ".tmp"
 	if err := os.WriteFile(tmp, append(b, '\n'), 0o644); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return &apiError{status: http.StatusInternalServerError, kind: "internal",
 			message: fmt.Sprintf("writing %s: %v", settingsFileName, err)}
 	}
 	if err := os.Rename(tmp, f.path); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return &apiError{status: http.StatusInternalServerError, kind: "internal",
 			message: fmt.Sprintf("publishing %s: %v", settingsFileName, err)}
 	}

@@ -59,7 +59,7 @@ func Import(dir string, r io.Reader) (events, batches int, err error) {
 	}
 	for _, batch := range groups {
 		if err := st.AppendRestoredBatch(batch); err != nil {
-			st.Close()
+			_ = st.Close() // already failing; the batch error is the one to report
 			removeRestoreFiles(dir)
 			return 0, 0, fmt.Errorf("import: writing batch %s: %w", batch[0].Batch, err)
 		}
@@ -122,7 +122,7 @@ func prepareDir(dir string) error {
 // restore, returning the directory to its pre-import emptiness.
 func removeRestoreFiles(dir string) {
 	for _, name := range restoreLeftovers {
-		os.Remove(filepath.Join(dir, name))
+		_ = os.Remove(filepath.Join(dir, name)) // best-effort by contract
 	}
 }
 

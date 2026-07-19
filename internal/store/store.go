@@ -142,21 +142,21 @@ func open(dir, dbName string) (*Store, error) {
 	dsn := baseDSN(filepath.Join(dir, dbName))
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		lock.release()
+		_ = lock.release()
 		return nil, fmt.Errorf("store: opening database: %w", err)
 	}
 	// See the Store comment: the write side is exactly one connection.
 	db.SetMaxOpenConns(1)
 
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
-		lock.release()
+		_ = db.Close()
+		_ = lock.release()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
 	}
 	rdb, err := openReadPool(dsn)
 	if err != nil {
-		db.Close()
-		lock.release()
+		_ = db.Close()
+		_ = lock.release()
 		return nil, err
 	}
 	return &Store{db: db, rdb: rdb, dsn: dsn, lock: lock}, nil
@@ -181,11 +181,11 @@ func OpenReadOnly(dir string) (*Store, error) {
 	var n int
 	if err := rdb.QueryRow(
 		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='events'`).Scan(&n); err != nil {
-		rdb.Close()
+		_ = rdb.Close()
 		return nil, fmt.Errorf("store: opening %s: %w", path, err)
 	}
 	if n != 1 {
-		rdb.Close()
+		_ = rdb.Close()
 		return nil, fmt.Errorf("store: %s is not a churn workspace (no events table)", path)
 	}
 	return &Store{rdb: rdb, dsn: dsn}, nil
@@ -256,7 +256,7 @@ func (s *Store) AppendBatch(events []event.Envelope, refs []Ref) ([]event.Envelo
 	if err != nil {
 		return nil, fmt.Errorf("store: begin: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // no-op after a successful commit
 
 	var last int64
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM events`).Scan(&last); err != nil {
@@ -311,7 +311,7 @@ func (s *Store) Scan(fn func(event.Envelope) error) error {
 	if err != nil {
 		return fmt.Errorf("store: scan: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var ev event.Envelope
 		var causes, entity sql.NullString
@@ -352,7 +352,7 @@ func (s *Store) AppendRestoredBatch(events []event.Envelope) error {
 	if err != nil {
 		return fmt.Errorf("store: begin: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // no-op after a successful commit
 
 	var last int64
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM events`).Scan(&last); err != nil {
@@ -412,7 +412,7 @@ func (s *Store) Reindex() (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("store: begin: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // no-op after a successful commit
 
 	// Collect first, then rewrite: the write pool is one connection, so the
 	// INSERTs must not interleave with an open cursor.
@@ -431,17 +431,19 @@ func (s *Store) Reindex() (int, error) {
 		var r row
 		var data string
 		if err := rows.Scan(&r.seq, &r.typ, &r.v, &data); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return 0, fmt.Errorf("store: reindex scan row: %w", err)
 		}
 		r.data = []byte(data)
 		evs = append(evs, r)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return 0, fmt.Errorf("store: reindex scan: %w", err)
 	}
-	rows.Close()
+	if err := rows.Close(); err != nil {
+		return 0, fmt.Errorf("store: reindex scan close: %w", err)
+	}
 
 	if _, err := tx.Exec(`DELETE FROM event_refs`); err != nil {
 		return 0, fmt.Errorf("store: clearing event_refs: %w", err)
@@ -496,7 +498,7 @@ func (s *Store) Backup(dest string) error {
 	if err != nil {
 		return fmt.Errorf("store: backup: opening connection: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }() // dedicated backup connection; read-only use
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`VACUUM INTO ?`, dest); err != nil {
 		// A failed VACUUM INTO may leave a partial destination file behind —
@@ -504,7 +506,7 @@ func (s *Store) Backup(dest string) error {
 		// between the pre-check and the statement, SQLite reports the
 		// existing file and removing it would destroy someone else's data.
 		if !strings.Contains(err.Error(), "already exists") {
-			os.Remove(dest)
+			_ = os.Remove(dest)
 		}
 		return fmt.Errorf("store: backup: %w", err)
 	}
@@ -535,8 +537,8 @@ func FinalizeRestore(dir string) error {
 	// Best-effort directory sync; Windows commonly refuses directory-handle
 	// flushes, and the rename is already visible either way.
 	if d, err := os.Open(dir); err == nil {
-		d.Sync()
-		d.Close()
+		_ = d.Sync()
+		_ = d.Close()
 	}
 	return nil
 }

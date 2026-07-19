@@ -1,12 +1,13 @@
 // Command churn is the work dependency & resource tracker (DESIGN.md).
 //
-// One binary, five subcommands:
+// One binary, six subcommands:
 //
 //	serve       run the workspace server (lock, replay, writer, HTTP API)
 //	export-log  stream the event log as canonical JSONL (§5.4)
 //	import-log  restore a JSONL log into an empty data directory (§5.4)
 //	backup      write an online, transactionally consistent snapshot
 //	reindex     rebuild the derived event_refs table
+//	seed-demo   create a demo workspace in an empty data directory
 //
 // The command layer is deliberately thin: all real logic lives in the
 // internal packages (store, writer, interchange, server); main wires flags,
@@ -34,6 +35,7 @@ commands:
   import-log  restore a JSONL log into an empty data directory
   backup      write a consistent online snapshot of the workspace database
   reindex     rebuild the derived event_refs table
+  seed-demo   create a demo workspace in an empty data directory
 
 Run 'churn <command> -h' for command flags.
 `
@@ -69,6 +71,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return cmdBackup(rest, stdout, stderr)
 	case "reindex":
 		return cmdReindex(rest, stdout, stderr)
+	case "seed-demo":
+		return cmdSeedDemo(rest, stdout, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usageText)
 		return nil

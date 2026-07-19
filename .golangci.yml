@@ -1,0 +1,57 @@
+# golangci-lint v2 configuration (PLAN.md M7).
+#
+# Philosophy: a small, high-signal set — correctness linters everywhere,
+# plus exhaustive on the enum-shaped switches of the event/domain layer so
+# a new state semantic or derived status cannot silently fall through a
+# switch. (The fold's dispatch over event types is a *type* switch guarded
+# by its own fail-closed default arm — "no fold logic" is an error — which
+# exhaustive cannot and need not check.)
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - govet
+    - errcheck
+    - staticcheck # includes the former gosimple and stylecheck
+    - unused
+    - ineffassign
+    - misspell
+    - exhaustive
+  settings:
+    exhaustive:
+      # A default case never silences the check: switches over the closed
+      # semantic/status sets must name every member, so adding one breaks
+      # the build path here instead of misbehaving at runtime.
+      default-signifies-exhaustive: false
+    misspell:
+      locale: US
+      ignore-rules:
+        # "cancelled" is the DESIGN.md §2.2 default state NAME — data the
+        # spec fixes, not prose — and prose follows the spec's spelling.
+        - cancelled
+    errcheck:
+      exclude-functions:
+        # Human-oriented CLI/diagnostic output: a failed write to
+        # stdout/stderr has no actionable recovery, and checking it would
+        # bury every usage/print line in ceremony.
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+  exclusions:
+    rules:
+      # exhaustive is scoped to the packages that own the closed sets
+      # (state semantics, derived statuses, error kinds). Elsewhere —
+      # server DTO rendering, analytics displays — a default arm is the
+      # idiomatic and intended shape.
+      - path-except: ^internal/(domain|event)/
+        linters:
+          - exhaustive
+      # Tests: cleanup-path error returns (Close/Kill/Wait on defer, helper
+      # returns consumed for their assertion side effect) are ignored
+      # deliberately — a failure there surfaces as the test failure itself.
+      # Switches in tests are not the closed-set switches exhaustive guards.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - exhaustive

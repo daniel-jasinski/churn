@@ -29,7 +29,7 @@ func BenchmarkBatchRefresh(b *testing.B) {
 		Seq: p.LastSeq + 1, ID: "ev_bench", Origin: "wr_big", Batch: "b_bench",
 		TS: p.LastTS, Actor: "perf",
 		Type: event.TypeThingCreated, V: 1, Entity: "th_bench",
-		Data: []byte(fmt.Sprintf(`{"name":"bench","project":"pr_big","type":"ty_t"}`)),
+		Data: []byte(`{"name":"bench","project":"pr_big","type":"ty_t"}`),
 	}}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

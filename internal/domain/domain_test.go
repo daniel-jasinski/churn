@@ -257,7 +257,7 @@ func TestCloneIsIndependent(t *testing.T) {
 	}
 	isReference := func(k reflect.Kind) bool {
 		switch k {
-		case reflect.Map, reflect.Slice, reflect.Ptr, reflect.Interface,
+		case reflect.Map, reflect.Slice, reflect.Pointer, reflect.Interface,
 			reflect.Chan, reflect.Func, reflect.UnsafePointer:
 			return true
 		}
@@ -268,7 +268,7 @@ func TestCloneIsIndependent(t *testing.T) {
 		f := pt.Field(i)
 		requireCase(f.Name)
 		// Recurse into entity structs stored as map[string]*T.
-		if f.Type.Kind() != reflect.Map || f.Type.Elem().Kind() != reflect.Ptr ||
+		if f.Type.Kind() != reflect.Map || f.Type.Elem().Kind() != reflect.Pointer ||
 			f.Type.Elem().Elem().Kind() != reflect.Struct {
 			continue
 		}

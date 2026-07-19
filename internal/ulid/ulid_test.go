@@ -68,7 +68,7 @@ func TestLexicographicOrderFollowsTime(t *testing.T) {
 			t.Fatal(err)
 		}
 		s := u.String()
-		if prev != "" && !(prev < s) {
+		if prev != "" && prev >= s {
 			t.Fatalf("not increasing at %d: %s then %s", i, prev, s)
 		}
 		prev = s
@@ -89,7 +89,7 @@ func TestMonotonicWithinSameMillisecond(t *testing.T) {
 	if a.Time() != b.Time() {
 		t.Fatalf("timestamps differ: %d vs %d", a.Time(), b.Time())
 	}
-	if !(bytes.Compare(a[:], b[:]) < 0) {
+	if bytes.Compare(a[:], b[:]) >= 0 {
 		t.Fatalf("not strictly increasing: %s then %s", a, b)
 	}
 	// b must be exactly a+1 in the entropy.
