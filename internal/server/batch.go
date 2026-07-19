@@ -55,7 +55,7 @@ type batchRequest struct {
 // batchOp is one operation of a batch.
 //
 //	op: create | supersede | retract | transition | availability | grant | revoke
-//	kind: project | thing | resource | dependency | requirement | state | type | capability
+//	kind: project | thing | resource | dependency | requirement | state | type | resource_type | capability
 //	id:   target entity id (required except for create)
 //	data: the event payload for the (kind, op) — the same schema the
 //	      single-entity endpoints take
@@ -180,8 +180,8 @@ type refResolver func(ref string) (string, *apiError)
 // resolvePayloadRefs substitutes placeholder references in the id-bearing
 // fields of a decoded batch payload — the fields the server understands,
 // never raw JSON (metadata and names keep "$0" literally). Payload types
-// without entity references (vocab defines, project/resource creates,
-// availability) need no case.
+// without entity references (vocab defines, project creates, availability)
+// need no case.
 func resolvePayloadRefs(pl event.Payload, resolve refResolver) *apiError {
 	fields := func(fs ...*string) *apiError {
 		for _, f := range fs {
@@ -222,6 +222,10 @@ func resolvePayloadRefs(pl event.Payload, resolve refResolver) *apiError {
 			return e
 		}
 		return slice(p.Capabilities)
+	case *event.ResourceCreated:
+		return fields(&p.Type)
+	case *event.ResourceSuperseded:
+		return fields(&p.Type)
 	case *event.CapabilityGranted:
 		return fields(&p.Capability)
 	case *event.CapabilityRevoked:

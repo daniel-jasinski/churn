@@ -4,8 +4,8 @@
 // 1, named ⇒ capacity 1). Referential and cross-entity rules live in the
 // domain package.
 //
-// Entity ids use typed prefixes (st_, ty_, cap_, pr_, th_, dep_, req_, rs_,
-// al_) followed by a caller-minted unique suffix (a ULID in production; the
+// Entity ids use typed prefixes (st_, ty_, cap_, pr_, th_, dep_, req_, rt_,
+// rs_, al_) followed by a caller-minted unique suffix (a ULID in production; the
 // suffix format is deliberately not validated so readers stay permissive).
 // The envelope's entity column carries the id of the entity an event is
 // about; payloads never repeat it.
@@ -20,17 +20,18 @@ import (
 
 // Typed id prefixes (DESIGN.md §5.2 "everything addressable has a stable id").
 const (
-	PrefixWorkspace   = "ws_"
-	PrefixWriter      = "wr_"
-	PrefixState       = "st_"
-	PrefixType        = "ty_"
-	PrefixCapability  = "cap_"
-	PrefixProject     = "pr_"
-	PrefixThing       = "th_"
-	PrefixDependency  = "dep_"
-	PrefixRequirement = "req_"
-	PrefixResource    = "rs_"
-	PrefixAllocation  = "al_"
+	PrefixWorkspace    = "ws_"
+	PrefixWriter       = "wr_"
+	PrefixState        = "st_"
+	PrefixType         = "ty_"
+	PrefixCapability   = "cap_"
+	PrefixProject      = "pr_"
+	PrefixThing        = "th_"
+	PrefixDependency   = "dep_"
+	PrefixRequirement  = "req_"
+	PrefixResourceType = "rt_"
+	PrefixResource     = "rs_"
+	PrefixAllocation   = "al_"
 )
 
 // The closed set of state semantics (DESIGN.md §2.2).
@@ -93,6 +94,10 @@ const (
 	TypeRequirementSuperseded = "requirement.superseded"
 	TypeRequirementRetracted  = "requirement.retracted"
 
+	TypeResourceTypeDefined    = "resourcetype.defined"
+	TypeResourceTypeSuperseded = "resourcetype.superseded"
+	TypeResourceTypeRetracted  = "resourcetype.retracted"
+
 	TypeResourceCreated             = "resource.created"
 	TypeResourceSuperseded          = "resource.superseded"
 	TypeResourceRetracted           = "resource.retracted"
@@ -130,6 +135,9 @@ func init() {
 	reg(TypeRequirementAsserted, PrefixRequirement, func() Payload { return new(RequirementAsserted) })
 	reg(TypeRequirementSuperseded, PrefixRequirement, func() Payload { return new(RequirementSuperseded) })
 	reg(TypeRequirementRetracted, PrefixRequirement, func() Payload { return new(RequirementRetracted) })
+	reg(TypeResourceTypeDefined, PrefixResourceType, func() Payload { return new(ResourceTypeDefined) })
+	reg(TypeResourceTypeSuperseded, PrefixResourceType, func() Payload { return new(ResourceTypeSuperseded) })
+	reg(TypeResourceTypeRetracted, PrefixResourceType, func() Payload { return new(ResourceTypeRetracted) })
 	reg(TypeResourceCreated, PrefixResource, func() Payload { return new(ResourceCreated) })
 	reg(TypeResourceSuperseded, PrefixResource, func() Payload { return new(ResourceSuperseded) })
 	reg(TypeResourceRetracted, PrefixResource, func() Payload { return new(ResourceRetracted) })
@@ -511,41 +519,92 @@ type RequirementRetracted struct{}
 // Validate implements the payload contract.
 func (p *RequirementRetracted) Validate() error { return nil }
 
+// ── vocabulary: resource types ──
+
+// ResourceTypeDefined declares a resource type (v1).
+type ResourceTypeDefined struct {
+	Name        string `json:"name"`
+	Color       string `json:"color,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// Validate implements the payload contract.
+func (p *ResourceTypeDefined) Validate() error { return requireName(p.Name) }
+
+// ResourceTypeSuperseded is the full replacement of a resource type's
+// attributes (v1).
+type ResourceTypeSuperseded struct {
+	Name        string `json:"name"`
+	Color       string `json:"color,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// Validate implements the payload contract.
+func (p *ResourceTypeSuperseded) Validate() error { return requireName(p.Name) }
+
+// ResourceTypeRetracted tombstones a resource type (v1).
+type ResourceTypeRetracted struct{}
+
+// Validate implements the payload contract.
+func (p *ResourceTypeRetracted) Validate() error { return nil }
+
 // ── resources ──
 
 // ResourceCreated creates a workspace-global resource (v1). Capabilities are
 // granted by separate capability.granted events; availability defaults to
-// true and changes via resource.availability_changed.
+// true and changes via resource.availability_changed. Type is an optional
+// resource type reference (categorization only — the engine attaches no
+// meaning to it); the field is additive, so v stays 1 and older events
+// simply lack it.
 type ResourceCreated struct {
 	Name     string          `json:"name"`
 	Kind     string          `json:"kind"`
 	Named    bool            `json:"named"`
 	Capacity int             `json:"capacity"`
+	Type     string          `json:"type,omitempty"`
 	Metadata json.RawMessage `json:"metadata,omitempty"`
 }
 
 // Validate implements the payload contract.
 func (p *ResourceCreated) Validate() error {
-	return validateResourceShape(p.Name, p.Kind, p.Named, p.Capacity)
+	return validateResourceShape(p.Name, p.Kind, p.Named, p.Capacity, p.Type)
+}
+
+// Refs implements Referencer.
+func (p *ResourceCreated) Refs() []Ref {
+	if p.Type == "" {
+		return nil
+	}
+	return []Ref{{p.Type, "type"}}
 }
 
 // ResourceSuperseded is the full replacement of a resource's mutable
 // attribute set (v1). Capability grants and availability are separate facts
-// and survive supersession.
+// and survive supersession. Type is the same optional, additive resource
+// type reference as on ResourceCreated.
 type ResourceSuperseded struct {
 	Name     string          `json:"name"`
 	Kind     string          `json:"kind"`
 	Named    bool            `json:"named"`
 	Capacity int             `json:"capacity"`
+	Type     string          `json:"type,omitempty"`
 	Metadata json.RawMessage `json:"metadata,omitempty"`
 }
 
 // Validate implements the payload contract.
 func (p *ResourceSuperseded) Validate() error {
-	return validateResourceShape(p.Name, p.Kind, p.Named, p.Capacity)
+	return validateResourceShape(p.Name, p.Kind, p.Named, p.Capacity, p.Type)
 }
 
-func validateResourceShape(name, kind string, named bool, capacity int) error {
+// Refs implements Referencer.
+func (p *ResourceSuperseded) Refs() []Ref {
+	if p.Type == "" {
+		return nil
+	}
+	return []Ref{{p.Type, "type"}}
+}
+
+func validateResourceShape(name, kind string, named bool, capacity int, typ string) error {
 	if err := requireName(name); err != nil {
 		return err
 	}
@@ -558,7 +617,7 @@ func validateResourceShape(name, kind string, named bool, capacity int) error {
 	if named && capacity != 1 {
 		return fmt.Errorf("a named resource's capacity must be 1, got %d", capacity)
 	}
-	return nil
+	return checkOptID("type", typ, PrefixResourceType)
 }
 
 // ResourceRetracted tombstones a resource (v1).

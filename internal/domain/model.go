@@ -21,6 +21,14 @@ type ThingType struct {
 	Description string
 }
 
+// ResourceType is a user-defined resource type (§5.3) — pure categorization
+// for boards and reports; the engine attaches no meaning to it.
+type ResourceType struct {
+	Name        string
+	Color       string
+	Description string
+}
+
 // Capability is a user-defined capability tag (§5.3).
 type Capability struct {
 	Name        string
@@ -87,6 +95,9 @@ type Resource struct {
 	Named bool
 	// Capacity is the nominal capacity (>= 1; exactly 1 when Named).
 	Capacity int
+	// Type is the optional resource type id (rt_); "" if untyped. Display
+	// categorization only — matching stays capability-based (§2.4).
+	Type string
 	// Metadata is the canonicalized JSON metadata document; "" if absent.
 	Metadata string
 	// Capabilities is the set of granted capability ids.

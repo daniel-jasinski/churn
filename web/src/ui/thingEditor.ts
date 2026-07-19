@@ -7,6 +7,8 @@ import { closeModal, openModal } from '../modal';
 import { store } from '../store';
 import { showError, toast } from '../toast';
 import { isPromotionRejection, offerPromotion } from './promotion';
+import { openProjectEditor } from './projectEditor';
+import { openTypeEditor } from '../views/vocab';
 
 interface ReqRow {
   existing?: Requirement; // present = keep unless removed
@@ -19,14 +21,45 @@ interface ReqRow {
 export function openThingEditor(existing?: Thing, preset: { project?: string; parent?: string } = {}): void {
   const isEdit = !!existing;
   if (store.projects.length === 0) {
-    toast('Create a project first.', 'error');
+    // Every thing lives in a project: offer the project dialog first, then
+    // come back here with the fresh project preselected.
+    toast('Every thing lives in a project — create one first.', 'info', 4000);
+    openProjectEditor(undefined, (p) => openThingEditor(undefined, { ...preset, project: p.id }));
+    return;
+  }
+  if (store.types.length === 0) {
+    // Same pattern as the missing project: things need a declared type.
+    toast('Things need a declared type — define your first one.', 'info', 4000);
+    openTypeEditor(undefined, () => openThingEditor(existing, preset));
     return;
   }
   const projectId = existing?.project ?? preset.project ?? store.projects[0]!.id;
 
   const nameIn = h('input', { type: 'text', value: existing?.name ?? '', placeholder: 'name' });
-  const projectSel = select(store.projects.map((p) => ({ value: p.id, label: p.name })), projectId);
+  // The "+ New project…" option opens the (stacked) project dialog and
+  // selects the created project here on success. Edit mode omits it — a
+  // thing's project is immutable.
+  const NEW_PROJECT = '__new__';
+  const projectOpts = () => [
+    ...store.projects.map((p) => ({ value: p.id, label: p.name })),
+    ...(isEdit ? [] : [{ value: NEW_PROJECT, label: '+ New project…' }]),
+  ];
+  const projectSel = select(projectOpts(), projectId);
   projectSel.disabled = isEdit; // a thing's project is immutable
+  let lastProject = projectId;
+  projectSel.addEventListener('change', () => {
+    if (projectSel.value !== NEW_PROJECT) {
+      lastProject = projectSel.value;
+      return;
+    }
+    projectSel.value = lastProject; // revert until the dialog succeeds
+    openProjectEditor(undefined, (p) => {
+      projectSel.replaceChildren(...projectOpts().map((o) =>
+        h('option', { value: o.value, selected: o.value === p.id }, o.label)));
+      projectSel.value = p.id;
+      projectSel.dispatchEvent(new Event('change')); // refresh the parent list
+    });
+  });
   const typeSel = select(store.types.map((t) => ({ value: t.id, label: t.name })),
     existing?.type ?? store.types[0]?.id);
   const parentOpts = () => [{ value: '', label: '(top level)' },

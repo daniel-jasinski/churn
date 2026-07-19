@@ -37,7 +37,7 @@ type kindSpec struct {
 
 // kinds enumerates the §5.1 CRUD surface: projects, things, resources,
 // dependencies, requirements, and the vocabulary (states, types,
-// capabilities) — the same shape via events (§5.3).
+// resource types, capabilities) — the same shape via events (§5.3).
 func (s *Server) kinds() []kindSpec {
 	return []kindSpec{
 		{
@@ -194,6 +194,28 @@ func (s *Server) kinds() []kindSpec {
 				out := make([]typeDTO, 0, len(p.Types))
 				for _, id := range sortedKeys(p.Types) {
 					out = append(out, buildTypeDTO(p, id))
+				}
+				return out
+			},
+		},
+		{
+			name: "resource_type", path: "vocab/resource-types", prefix: event.PrefixResourceType,
+			createType: event.TypeResourceTypeDefined, supersedeType: event.TypeResourceTypeSuperseded,
+			retractType: event.TypeResourceTypeRetracted,
+			newCreate:   func() event.Payload { return new(event.ResourceTypeDefined) },
+			newSupersede: func() event.Payload {
+				return new(event.ResourceTypeSuperseded)
+			},
+			retract: &event.ResourceTypeRetracted{},
+			exists: func(p *domain.Projection, id string) bool {
+				_, ok := p.ResourceTypes[id]
+				return ok
+			},
+			get: func(p *domain.Projection, id string) any { return buildResourceTypeDTO(p, id) },
+			list: func(p *domain.Projection, _ *http.Request) any {
+				out := make([]resourceTypeDTO, 0, len(p.ResourceTypes))
+				for _, id := range sortedKeys(p.ResourceTypes) {
+					out = append(out, buildResourceTypeDTO(p, id))
 				}
 				return out
 			},

@@ -117,9 +117,10 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	fuzz(60)
-	// Supplemental deterministic batches: the generator never supersedes or
-	// retracts vocabulary/projects, and the round-trip fixture must cover the
-	// whole catalog (define → supersede → retract an unused entity of each).
+	// Supplemental deterministic batches: the generator cannot be relied on
+	// to supersede or retract every vocabulary kind/projects, and the
+	// round-trip fixture must cover the whole catalog (define → supersede →
+	// retract an unused entity of each).
 	mint := func(prefix string) string {
 		t.Helper()
 		id, err := w.MintID(prefix)
@@ -128,8 +129,8 @@ func TestRoundTrip(t *testing.T) {
 		}
 		return id
 	}
-	stR, tyR, capR, prR := mint(event.PrefixState), mint(event.PrefixType),
-		mint(event.PrefixCapability), mint(event.PrefixProject)
+	stR, tyR, capR, prR, rtR := mint(event.PrefixState), mint(event.PrefixType),
+		mint(event.PrefixCapability), mint(event.PrefixProject), mint(event.PrefixResourceType)
 	// A deterministic allocation cycle guarantees allocation.opened AND
 	// .closed appear even when the fuzz never closed one: a dedicated
 	// resource/requirement pair, a transition into an active state (opening
@@ -149,15 +150,16 @@ func TestRoundTrip(t *testing.T) {
 		return best
 	}
 	stActive, stPending := stateOf(event.SemanticActive), stateOf(event.SemanticPending)
-	capZ, tyZ, prZ, rsZ := mint(event.PrefixCapability), mint(event.PrefixType),
-		mint(event.PrefixProject), mint(event.PrefixResource)
+	capZ, tyZ, prZ, rsZ, rtZ := mint(event.PrefixCapability), mint(event.PrefixType),
+		mint(event.PrefixProject), mint(event.PrefixResource), mint(event.PrefixResourceType)
 	thZ, reqZ, alZ := mint(event.PrefixThing), mint(event.PrefixRequirement), mint(event.PrefixAllocation)
 	for _, batch := range [][]writer.Command{
 		{
 			{Type: event.TypeCapabilityDefined, V: 1, Entity: capZ, Payload: event.CapabilityDefined{Name: "alloc cap"}},
 			{Type: event.TypeTypeDefined, V: 1, Entity: tyZ, Payload: event.TypeDefined{Name: "alloc type"}},
+			{Type: event.TypeResourceTypeDefined, V: 1, Entity: rtZ, Payload: event.ResourceTypeDefined{Name: "alloc rtype"}},
 			{Type: event.TypeProjectCreated, V: 1, Entity: prZ, Payload: event.ProjectCreated{Name: "alloc project"}},
-			{Type: event.TypeResourceCreated, V: 1, Entity: rsZ, Payload: event.ResourceCreated{Name: "alloc rs", Kind: event.KindReusable, Capacity: 1}},
+			{Type: event.TypeResourceCreated, V: 1, Entity: rsZ, Payload: event.ResourceCreated{Name: "alloc rs", Kind: event.KindReusable, Capacity: 1, Type: rtZ}},
 			{Type: event.TypeCapabilityGranted, V: 1, Entity: rsZ, Payload: event.CapabilityGranted{Capability: capZ}},
 			{Type: event.TypeThingCreated, V: 1, Entity: thZ, Payload: event.ThingCreated{Project: prZ, Name: "alloc thing", Type: tyZ}},
 			{Type: event.TypeRequirementAsserted, V: 1, Entity: reqZ, Payload: event.RequirementAsserted{Thing: thZ, Quantity: 1, Capabilities: []string{capZ}}},
@@ -170,21 +172,31 @@ func TestRoundTrip(t *testing.T) {
 			{Type: event.TypeThingStateChanged, V: 1, Entity: thZ, Payload: event.ThingStateChanged{State: stPending}},
 			{Type: event.TypeAllocationClosed, V: 1, Entity: alZ, Payload: event.AllocationClosed{}},
 		},
+		// Deterministic coverage of the resource sub-facts, independent of
+		// what the fuzz happened to roll: an availability toggle and a
+		// capability revocation.
+		{
+			{Type: event.TypeResourceAvailabilityChanged, V: 1, Entity: rsZ, Payload: event.ResourceAvailabilityChanged{Available: false, Note: "maintenance"}},
+			{Type: event.TypeCapabilityRevoked, V: 1, Entity: rsZ, Payload: event.CapabilityRevoked{Capability: capZ}},
+		},
 		{
 			{Type: event.TypeStateDefined, V: 1, Entity: stR, Payload: event.StateDefined{Name: "temp", Semantic: event.SemanticPending}},
 			{Type: event.TypeTypeDefined, V: 1, Entity: tyR, Payload: event.TypeDefined{Name: "temp type"}},
+			{Type: event.TypeResourceTypeDefined, V: 1, Entity: rtR, Payload: event.ResourceTypeDefined{Name: "temp rtype"}},
 			{Type: event.TypeCapabilityDefined, V: 1, Entity: capR, Payload: event.CapabilityDefined{Name: "temp cap"}},
 			{Type: event.TypeProjectCreated, V: 1, Entity: prR, Payload: event.ProjectCreated{Name: "temp project"}},
 		},
 		{
 			{Type: event.TypeStateSuperseded, V: 1, Entity: stR, Payload: event.StateSuperseded{Name: "temp'", Semantic: event.SemanticPending, Color: "#abc"}},
 			{Type: event.TypeTypeSuperseded, V: 1, Entity: tyR, Payload: event.TypeSuperseded{Name: "temp type'"}},
+			{Type: event.TypeResourceTypeSuperseded, V: 1, Entity: rtR, Payload: event.ResourceTypeSuperseded{Name: "temp rtype'"}},
 			{Type: event.TypeCapabilitySuperseded, V: 1, Entity: capR, Payload: event.CapabilitySuperseded{Name: "temp cap'"}},
 			{Type: event.TypeProjectSuperseded, V: 1, Entity: prR, Payload: event.ProjectSuperseded{Name: "temp project'"}},
 		},
 		{
 			{Type: event.TypeStateRetracted, V: 1, Entity: stR, Payload: event.StateRetracted{}},
 			{Type: event.TypeTypeRetracted, V: 1, Entity: tyR, Payload: event.TypeRetracted{}},
+			{Type: event.TypeResourceTypeRetracted, V: 1, Entity: rtR, Payload: event.ResourceTypeRetracted{}},
 			{Type: event.TypeCapabilityRetracted, V: 1, Entity: capR, Payload: event.CapabilityRetracted{}},
 			{Type: event.TypeProjectRetracted, V: 1, Entity: prR, Payload: event.ProjectRetracted{}},
 		},
@@ -218,6 +230,7 @@ func TestRoundTrip(t *testing.T) {
 		event.TypeThingStateChanged,
 		event.TypeDependencyAsserted, event.TypeDependencyRetracted,
 		event.TypeRequirementAsserted, event.TypeRequirementSuperseded, event.TypeRequirementRetracted,
+		event.TypeResourceTypeDefined, event.TypeResourceTypeSuperseded, event.TypeResourceTypeRetracted,
 		event.TypeResourceCreated, event.TypeResourceSuperseded, event.TypeResourceRetracted,
 		event.TypeResourceAvailabilityChanged,
 		event.TypeCapabilityGranted, event.TypeCapabilityRevoked,

@@ -377,8 +377,34 @@ func validateEvent(sim *Projection, ev event.Envelope, payload event.Payload) er
 				"requirement %s cannot be retracted while open allocations reference it", id)
 		}
 
-	case *event.ResourceCreated:
+	case *event.ResourceTypeDefined:
 		return checkNewID(sim, id)
+	case *event.ResourceTypeSuperseded:
+		// Supersession is free: name/color/description are display facts.
+		if _, ok := sim.ResourceTypes[id]; !ok {
+			return errf(KindUnknownEntity, []string{id}, "resource type %s does not exist", id)
+		}
+	case *event.ResourceTypeRetracted:
+		if _, ok := sim.ResourceTypes[id]; !ok {
+			return errf(KindUnknownEntity, []string{id}, "resource type %s does not exist", id)
+		}
+		var using []string
+		for rid, rs := range sim.Resources {
+			if rs.Type == id {
+				using = append(using, rid)
+			}
+		}
+		if len(using) > 0 {
+			sort.Strings(using)
+			return errf(KindRetractionBlocked, using,
+				"resource type %s cannot be retracted while resources reference it", id)
+		}
+
+	case *event.ResourceCreated:
+		if err := checkNewID(sim, id); err != nil {
+			return err
+		}
+		return checkResourceType(sim, id, pl.Type)
 	case *event.ResourceSuperseded:
 		rs, ok := sim.Resources[id]
 		if !ok {
@@ -390,6 +416,7 @@ func validateEvent(sim *Projection, ev event.Envelope, payload event.Payload) er
 					"resource %s cannot lose named while requirements pin it", id)
 			}
 		}
+		return checkResourceType(sim, id, pl.Type)
 	case *event.ResourceRetracted:
 		if _, ok := sim.Resources[id]; !ok {
 			return errf(KindUnknownEntity, []string{id}, "resource %s does not exist", id)
@@ -522,6 +549,19 @@ func checkParent(sim *Projection, child, childProject, parent string) error {
 				"parent %s carries requirements: parenting requires a requirement-free leaf (move them to a child step, §2.1)",
 				parent)
 		}
+	}
+	return nil
+}
+
+// checkResourceType enforces declared-before-use for a resource's optional
+// type reference (§5.3).
+func checkResourceType(sim *Projection, id, typ string) error {
+	if typ == "" {
+		return nil
+	}
+	if _, ok := sim.ResourceTypes[typ]; !ok {
+		return errf(KindUndefinedReference, []string{typ},
+			"resource %s: resource type %s is not defined", id, typ)
 	}
 	return nil
 }

@@ -80,12 +80,14 @@ function typesCol(): HTMLElement {
       chip(t.name, t.color, 'chip-type'),
       t.description ? h('span', { class: 'muted tiny' }, ' ' + t.description) : null,
       h('span', { class: 'spacer' }),
-      h('button', { class: 'btn btn-sm mut', onclick: () => typeEditor(t) }, 'edit'),
+      h('button', { class: 'btn btn-sm mut', onclick: () => openTypeEditor(t) }, 'edit'),
       h('button', { class: 'btn btn-sm btn-danger mut', onclick: () => void del(() => api.deleteType(t.id), t.name) }, '×')))),
-    h('button', { class: 'btn mut', onclick: () => typeEditor() }, '+ New type'));
+    h('button', { class: 'btn mut', onclick: () => openTypeEditor() }, '+ New type'));
 }
 
-function typeEditor(existing?: TypeDef): void {
+/** openTypeEditor defines or edits a thing type; onSaved runs after a
+ * successful define + refresh (the thing editor uses it to resume). */
+export function openTypeEditor(existing?: TypeDef, onSaved?: () => void): void {
   const nameIn = h('input', { type: 'text', value: existing?.name ?? '' });
   const colorIn = h('input', { type: 'color', value: existing?.color || '#6b7280' });
   const descIn = h('input', { type: 'text', value: existing?.description ?? '' });
@@ -103,6 +105,7 @@ function typeEditor(existing?: TypeDef): void {
             else await api.createType(data);
             closeModal();
             await store.refresh();
+            if (!existing && onSaved) onSaved();
           } catch (e) { showError(e); }
         },
       }, existing ? 'Save' : 'Define')));

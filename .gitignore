@@ -9,6 +9,10 @@ churn.lock
 /churn.exe
 /dist/
 
+# Script outputs (scripts/backup.sh, scripts/export.sh)
+churn-backup-*.db
+churn-export-*.jsonl
+
 # Frontend
 node_modules/
 

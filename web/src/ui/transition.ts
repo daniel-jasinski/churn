@@ -131,6 +131,7 @@ export function showProposalModal(t: Thing, state: StateDef, proposal: Proposal,
             if (e instanceof ApiError && 'fresh_proposal' in e.details) {
               const fresh = e.details['fresh_proposal'] as Proposal | null;
               if (fresh) {
+                closeModal(); // replace the stale proposal, don't stack on it
                 showProposalModal(t, state, fresh,
                   'The world drifted since this proposal was computed — review the fresh assignment below.');
               } else {

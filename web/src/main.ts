@@ -7,6 +7,7 @@ import { store } from './store';
 import { openAsOfPicker } from './ui/asof';
 import { renderBottlenecks } from './views/bottlenecks';
 import { renderGraph } from './views/graph';
+import { renderProjects } from './views/projects';
 import { renderHistory } from './views/history';
 import { renderReady } from './views/ready';
 import { renderResources } from './views/resources';
@@ -17,6 +18,7 @@ import { renderVocab } from './views/vocab';
 const NAV: [string, string, string][] = [
   ['ready', 'Ready', 'g r'],
   ['graph', 'Graph', 'g g'],
+  ['projects', 'Projects', 'g p'],
   ['resources', 'Resources', 'g s'],
   ['bottlenecks', 'Bottlenecks', 'g b'],
   ['tree', 'Tree', 'g t'],
@@ -76,6 +78,7 @@ function render(): void {
   switch (r.name) {
     case 'ready': renderReady(view); break;
     case 'graph': renderGraph(view, r.arg); break;
+    case 'projects': renderProjects(view); break;
     case 'resources': renderResources(view); break;
     case 'bottlenecks': renderBottlenecks(view); break;
     case 'tree': renderTree(view); break;
@@ -98,8 +101,8 @@ document.addEventListener('keydown', (e) => {
   if (gPending) {
     gPending = false;
     const map: Record<string, string> = {
-      r: 'ready', g: 'graph', s: 'resources', b: 'bottlenecks',
-      t: 'tree', v: 'vocab', h: 'history', w: 'settings',
+      r: 'ready', g: 'graph', p: 'projects', s: 'resources',
+      b: 'bottlenecks', t: 'tree', v: 'vocab', h: 'history', w: 'settings',
     };
     const dest = map[e.key];
     if (dest) { e.preventDefault(); navigate(dest); }

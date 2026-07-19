@@ -245,6 +245,9 @@ func (g *Generator) propose(p *domain.Projection) []Cmd {
 	ops := []op{
 		{2, func() []Cmd { return g.defineState(p) }},
 		{1, func() []Cmd { return g.defineType(p) }},
+		{1, func() []Cmd { return g.defineResourceType(p) }},
+		{1, func() []Cmd { return g.supersedeResourceType(p) }},
+		{1, func() []Cmd { return g.retractResourceType(p) }},
 		{1, func() []Cmd { return g.defineCapability(p) }},
 		{1, func() []Cmd { return g.createProject(p) }},
 		{1, func() []Cmd { return g.supersedeState(p) }},
@@ -417,6 +420,46 @@ func (g *Generator) defineType(p *domain.Projection) []Cmd {
 	}
 	id := g.id(event.PrefixType)
 	return []Cmd{{event.TypeTypeDefined, 1, id, &event.TypeDefined{Name: "type " + id}}}
+}
+
+func (g *Generator) defineResourceType(p *domain.Projection) []Cmd {
+	if len(p.ResourceTypes) >= 4 {
+		return nil
+	}
+	id := g.id(event.PrefixResourceType)
+	return []Cmd{{event.TypeResourceTypeDefined, 1, id,
+		&event.ResourceTypeDefined{Name: "rtype " + id}}}
+}
+
+func (g *Generator) supersedeResourceType(p *domain.Projection) []Cmd {
+	if len(p.ResourceTypes) == 0 {
+		return nil
+	}
+	// Always free: name/color/description are display facts, referenced or not.
+	id := g.pick(sortedKeys(p.ResourceTypes))
+	rt := p.ResourceTypes[id]
+	return []Cmd{{event.TypeResourceTypeSuperseded, 1, id,
+		&event.ResourceTypeSuperseded{Name: rt.Name + "'", Color: "#def"}}}
+}
+
+func (g *Generator) retractResourceType(p *domain.Projection) []Cmd {
+	var cands []string
+	for _, id := range sortedKeys(p.ResourceTypes) {
+		used := false
+		for _, rs := range p.Resources {
+			if rs.Type == id {
+				used = true
+				break
+			}
+		}
+		if !used {
+			cands = append(cands, id)
+		}
+	}
+	if len(cands) == 0 {
+		return nil
+	}
+	return []Cmd{{event.TypeResourceTypeRetracted, 1, g.pick(cands), &event.ResourceTypeRetracted{}}}
 }
 
 func (g *Generator) defineCapability(p *domain.Projection) []Cmd {
@@ -645,6 +688,7 @@ func (g *Generator) createResource(p *domain.Projection) []Cmd {
 	}
 	return []Cmd{{event.TypeResourceCreated, 1, id, &event.ResourceCreated{
 		Name: "resource " + id, Kind: event.KindReusable, Named: named, Capacity: capacity,
+		Type: g.maybeResourceType(p),
 	}}}
 }
 
@@ -660,8 +704,13 @@ func (g *Generator) supersedeResource(p *domain.Projection) []Cmd {
 		// must survive over-allocated resources.
 		capacity = 1 + g.rng.Intn(4)
 	}
+	// Keep, change, or drop the (meaning-free) type at random.
+	typ := rs.Type
+	if g.rng.Intn(3) == 0 {
+		typ = g.maybeResourceType(p)
+	}
 	return []Cmd{{event.TypeResourceSuperseded, 1, id, &event.ResourceSuperseded{
-		Name: rs.Name + "'", Kind: rs.Kind, Named: rs.Named, Capacity: capacity,
+		Name: rs.Name + "'", Kind: rs.Kind, Named: rs.Named, Capacity: capacity, Type: typ,
 	}}}
 }
 
@@ -686,6 +735,15 @@ func (g *Generator) retractResource(p *domain.Projection) []Cmd {
 		return nil
 	}
 	return []Cmd{{event.TypeResourceRetracted, 1, g.pick(cands), &event.ResourceRetracted{}}}
+}
+
+// maybeResourceType picks a declared resource type about half the time,
+// "" otherwise (resource types are optional).
+func (g *Generator) maybeResourceType(p *domain.Projection) string {
+	if len(p.ResourceTypes) == 0 || g.rng.Intn(2) == 0 {
+		return ""
+	}
+	return g.pick(sortedKeys(p.ResourceTypes))
 }
 
 func (g *Generator) toggleAvailability(p *domain.Projection) []Cmd {

@@ -80,11 +80,13 @@ type requirementDTO struct {
 }
 
 type resourceDTO struct {
-	ID           string          `json:"id"`
-	Name         string          `json:"name"`
-	Kind         string          `json:"kind"`
-	Named        bool            `json:"named"`
-	Capacity     int             `json:"capacity"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	Named    bool   `json:"named"`
+	Capacity int    `json:"capacity"`
+	// Type is the optional resource type id (rt_); omitted when untyped.
+	Type         string          `json:"type,omitempty"`
 	Metadata     json.RawMessage `json:"metadata,omitempty"`
 	Capabilities []string        `json:"capabilities,omitempty"`
 	Available    bool            `json:"available"`
@@ -115,6 +117,14 @@ type typeDTO struct {
 	Version     int64  `json:"version"`
 }
 
+type resourceTypeDTO struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Color       string `json:"color,omitempty"`
+	Description string `json:"description,omitempty"`
+	Version     int64  `json:"version"`
+}
+
 type capabilityDTO struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -130,6 +140,7 @@ type workspaceCounts struct {
 	Requirements      int `json:"requirements"`
 	States            int `json:"states"`
 	Types             int `json:"types"`
+	ResourceTypes     int `json:"resource_types"`
 	Capabilities      int `json:"capabilities"`
 	OpenAllocations   int `json:"open_allocations"`
 	ClosedAllocations int `json:"closed_allocations"`
@@ -224,7 +235,7 @@ func buildResourceDTO(p *domain.Projection, id string) resourceDTO {
 	}
 	return resourceDTO{
 		ID: id, Name: rs.Name, Kind: rs.Kind, Named: rs.Named,
-		Capacity: rs.Capacity, Metadata: rawMeta(rs.Metadata),
+		Capacity: rs.Capacity, Type: rs.Type, Metadata: rawMeta(rs.Metadata),
 		Capabilities: caps, Available: rs.Available, Note: rs.Note,
 		EffectiveCapacity: rs.EffectiveCapacity(), Allocated: allocated,
 		Free: free, OverAllocated: allocated > rs.EffectiveCapacity(),
@@ -242,6 +253,12 @@ func buildTypeDTO(p *domain.Projection, id string) typeDTO {
 	ty := p.Types[id]
 	return typeDTO{ID: id, Name: ty.Name, Color: ty.Color,
 		Description: ty.Description, Version: p.Version(id)}
+}
+
+func buildResourceTypeDTO(p *domain.Projection, id string) resourceTypeDTO {
+	rt := p.ResourceTypes[id]
+	return resourceTypeDTO{ID: id, Name: rt.Name, Color: rt.Color,
+		Description: rt.Description, Version: p.Version(id)}
 }
 
 func buildCapabilityDTO(p *domain.Projection, id string) capabilityDTO {

@@ -40,11 +40,12 @@ type Projection struct {
 	// statuses are re-evaluated into Statuses (§3.3).
 	LastBatch string
 
-	// States, Types, and Capabilities are the vocabulary registries (§5.3),
-	// keyed by st_/ty_/cap_ id.
-	States       map[string]*State
-	Types        map[string]*ThingType
-	Capabilities map[string]*Capability
+	// States, Types, ResourceTypes, and Capabilities are the vocabulary
+	// registries (§5.3), keyed by st_/ty_/rt_/cap_ id.
+	States        map[string]*State
+	Types         map[string]*ThingType
+	ResourceTypes map[string]*ResourceType
+	Capabilities  map[string]*Capability
 	// Projects is keyed by pr_ id.
 	Projects map[string]*Project
 	// Things is keyed by th_ id.
@@ -80,17 +81,18 @@ type Projection struct {
 // NewProjection returns the projection of an empty log.
 func NewProjection() *Projection {
 	return &Projection{
-		States:       map[string]*State{},
-		Types:        map[string]*ThingType{},
-		Capabilities: map[string]*Capability{},
-		Projects:     map[string]*Project{},
-		Things:       map[string]*Thing{},
-		Dependencies: map[string]*Dependency{},
-		Requirements: map[string]*Requirement{},
-		Resources:    map[string]*Resource{},
-		Allocations:  map[string]*Allocation{},
-		Versions:     map[string]int64{},
-		Statuses:     map[string]*ThingStatus{},
+		States:        map[string]*State{},
+		Types:         map[string]*ThingType{},
+		ResourceTypes: map[string]*ResourceType{},
+		Capabilities:  map[string]*Capability{},
+		Projects:      map[string]*Project{},
+		Things:        map[string]*Thing{},
+		Dependencies:  map[string]*Dependency{},
+		Requirements:  map[string]*Requirement{},
+		Resources:     map[string]*Resource{},
+		Allocations:   map[string]*Allocation{},
+		Versions:      map[string]int64{},
+		Statuses:      map[string]*ThingStatus{},
 	}
 }
 
@@ -107,6 +109,7 @@ func (p *Projection) Clone() *Projection {
 	c := *p
 	c.States = cloneMap(p.States, clonePtr)
 	c.Types = cloneMap(p.Types, clonePtr)
+	c.ResourceTypes = cloneMap(p.ResourceTypes, clonePtr)
 	c.Capabilities = cloneMap(p.Capabilities, clonePtr)
 	c.Projects = cloneMap(p.Projects, clonePtr)
 	c.Things = cloneMap(p.Things, (*Thing).clone)
@@ -356,13 +359,29 @@ func (p *Projection) fold(ev event.Envelope, payload event.Payload) error {
 		}
 		delete(p.Requirements, id)
 
+	case *event.ResourceTypeDefined:
+		if err := p.mustNotExist(id); err != nil {
+			return err
+		}
+		p.ResourceTypes[id] = &ResourceType{Name: pl.Name, Color: pl.Color, Description: pl.Description}
+	case *event.ResourceTypeSuperseded:
+		if _, ok := p.ResourceTypes[id]; !ok {
+			return fmt.Errorf("resource type %s does not exist", id)
+		}
+		p.ResourceTypes[id] = &ResourceType{Name: pl.Name, Color: pl.Color, Description: pl.Description}
+	case *event.ResourceTypeRetracted:
+		if _, ok := p.ResourceTypes[id]; !ok {
+			return fmt.Errorf("resource type %s does not exist", id)
+		}
+		delete(p.ResourceTypes, id)
+
 	case *event.ResourceCreated:
 		if err := p.mustNotExist(id); err != nil {
 			return err
 		}
 		p.Resources[id] = &Resource{
 			Name: pl.Name, Kind: pl.Kind, Named: pl.Named, Capacity: pl.Capacity,
-			Metadata: string(pl.Metadata), Capabilities: map[string]struct{}{},
+			Type: pl.Type, Metadata: string(pl.Metadata), Capabilities: map[string]struct{}{},
 			Available: true,
 		}
 	case *event.ResourceSuperseded:
@@ -370,8 +389,8 @@ func (p *Projection) fold(ev event.Envelope, payload event.Payload) error {
 		if !ok {
 			return fmt.Errorf("resource %s does not exist", id)
 		}
-		rs.Name, rs.Kind, rs.Named, rs.Capacity, rs.Metadata =
-			pl.Name, pl.Kind, pl.Named, pl.Capacity, string(pl.Metadata)
+		rs.Name, rs.Kind, rs.Named, rs.Capacity, rs.Type, rs.Metadata =
+			pl.Name, pl.Kind, pl.Named, pl.Capacity, pl.Type, string(pl.Metadata)
 	case *event.ResourceRetracted:
 		if _, ok := p.Resources[id]; !ok {
 			return fmt.Errorf("resource %s does not exist", id)

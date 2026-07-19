@@ -145,21 +145,36 @@ function toggleAvailability(res: Resource): void {
 
 export function openResourceEditor(existing?: Resource): void {
   const nameIn = h('input', { type: 'text', value: existing?.name ?? '', placeholder: 'name' });
+  // Capacity applies to pools only: named ⇒ capacity 1 by invariant (§2.3,
+  // §5.2 — the server enforces it; the payload below always sends 1 for
+  // named regardless of field state). The pool value is remembered across
+  // toggles so flipping to named and back loses nothing.
+  let poolCapacity = existing && !existing.named ? existing.capacity : 1;
+  const capIn = h('input', { type: 'number', min: '1', value: String(poolCapacity) });
+  const capWrap = h('div');
+  const renderCapacity = (named: boolean) => {
+    capWrap.replaceChildren(named
+      ? field('Capacity',
+        h('input', { type: 'number', value: '1', disabled: true }),
+        'named resources are a single unit — capacity is fixed at 1')
+      : field('Capacity', capIn));
+  };
   const namedSel = select([
     { value: 'pool', label: 'pool — interchangeable units (capacity N)' },
     { value: 'named', label: 'named — one specific unit (capacity 1, pinnable)' },
   ], existing?.named ? 'named' : 'pool', (v) => {
-    capIn.disabled = v === 'named';
-    if (v === 'named') capIn.value = '1';
+    if (v === 'named') {
+      poolCapacity = Math.max(1, Number(capIn.value) || 1); // remember
+    } else {
+      capIn.value = String(poolCapacity); // restore
+    }
+    renderCapacity(v === 'named');
   });
-  const capIn = h('input', {
-    type: 'number', min: '1', value: String(existing?.capacity ?? 1),
-    disabled: existing?.named ?? false,
-  });
+  renderCapacity(existing?.named ?? false);
   const body = h('div', null,
     field('Name', nameIn),
     field('Shape', namedSel, modelingGuidance()),
-    field('Capacity', capIn),
+    capWrap,
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
       h('button', {
@@ -168,9 +183,13 @@ export function openResourceEditor(existing?: Resource): void {
           const name = nameIn.value.trim();
           if (!name) { toast('Name is required.', 'error'); return; }
           const named = namedSel.value === 'named';
+          // Supersession is full replacement (DESIGN §5.2): fields this
+          // dialog does not expose must be carried over or they are cleared.
           const data = {
             name, kind: 'reusable', named,
             capacity: named ? 1 : Math.max(1, Number(capIn.value) || 1),
+            ...(existing?.type ? { type: existing.type } : {}),
+            ...(existing?.metadata ? { metadata: existing.metadata } : {}),
           };
           try {
             if (existing) await api.updateResource(existing.id, data, existing.version);

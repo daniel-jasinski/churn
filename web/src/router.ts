@@ -1,5 +1,6 @@
-// router.ts — hash-based routing: #/ready, #/graph/:projectId, #/resources,
-// #/bottlenecks, #/tree, #/vocab, #/history/:entityId?, #/settings.
+// router.ts — hash-based routing: #/ready, #/graph/:projectId, #/projects,
+// #/resources, #/bottlenecks, #/tree, #/vocab, #/history/:entityId?,
+// #/settings.
 
 export interface Route {
   name: string;
@@ -11,8 +12,8 @@ export function parseHash(hash: string): Route {
   const name = parts[0] || 'ready';
   const arg = parts[1] ? decodeURIComponent(parts[1]) : undefined;
   switch (name) {
-    case 'ready': case 'graph': case 'resources': case 'bottlenecks':
-    case 'tree': case 'vocab': case 'history': case 'settings':
+    case 'ready': case 'graph': case 'projects': case 'resources':
+    case 'bottlenecks': case 'tree': case 'vocab': case 'history': case 'settings':
       return { name, arg };
     default:
       return { name: 'ready' };

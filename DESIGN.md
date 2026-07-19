@@ -202,6 +202,10 @@ A workspace-global entity work is done *with*.
 - **availability** — boolean toggle + note ("maintenance until further
   notice", "on leave"). Unavailable resources count as capacity 0. (A real
   calendar is a later-phase upgrade; the toggle covers the V1 need.)
+- **type** — optional reference to a user-declared **resource type** (§5.3):
+  categorization for boards and reports ("person", "room", "license"). The
+  engine attaches no meaning to it — matching remains capability-based
+  (§2.4); a typed and an untyped resource behave identically.
 
 > Modeling guidance surfaced in the UI: if individual people or tools within a
 > group differ in skills or you care *which one* did the work, model them as
@@ -586,6 +590,7 @@ writer.started                                new writer lineage (origin) after 
                        ── vocabulary (§5.3) ──
 state.defined / .superseded / .retracted      name, semantic, color, description
 type.defined / .superseded / .retracted       name, color, description
+resourcetype.defined / .superseded / .retracted   name, color, description
 capability.defined / .superseded / .retracted name, description
 
                        ── domain ──
@@ -594,7 +599,7 @@ thing.created / .superseded / .retracted    name, type→id, parent, metadata
 thing.state_changed                         state→id
 dependency.asserted / .retracted            thing → thing, on_abandoned policy
 requirement.asserted / .superseded / .retracted   quantity × (capability ids | pinned resource)
-resource.created / .superseded / .retracted name, kind, named, capacity, metadata
+resource.created / .superseded / .retracted name, kind, named, capacity, type→id (optional), metadata
 resource.availability_changed               available, note
 capability.granted / .revoked               resource, capability→id
 allocation.opened / allocation.closed       thing, resource, quantity, requirement→id
@@ -675,8 +680,8 @@ Invariants enforced in the domain core before an event batch is appended
 
 ### 5.3 The vocabulary — how the user-defined ontology is stored
 
-The ontology the user builds — **states, thing types, capability tags** — is
-not a schema file, a config, or a second store. It is **entities in the same
+The ontology the user builds — **states, thing types, resource types,
+capability tags** — is not a schema file, a config, or a second store. It is **entities in the same
 event log**, created and evolved with the same three verbs
 (define/supersede/retract) as everything else, through the same writer.
 
@@ -688,7 +693,7 @@ Rules that keep vocabulary and data consistent **by construction**:
   machinery as cycles. A typo'd capability (`data-anaylsis`) cannot silently break
   matching, because it can never enter the log.
 - **References are by id; names are display facts.** Domain events reference
-  vocabulary entities by stable id (`st_…`, `ty_…`, `cap_…`); the name,
+  vocabulary entities by stable id (`st_…`, `ty_…`, `rt_…`, `cap_…`); the name,
   color, and description live on the vocabulary entity and supersede freely.
   Renaming `awaiting-approval` to `approval-pending` is one ordinary supersession — no mass
   rewrite, no name-resolution-as-of-time-T subtleties during replay, and no

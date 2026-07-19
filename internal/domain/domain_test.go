@@ -55,6 +55,8 @@ func fullLog() []event.Envelope {
 		envE(13, t0, event.TypeCapabilityGranted, "wr_1", "rs_r", `{"capability":"cap_c"}`),
 		envE(14, t0, event.TypeThingStateChanged, "wr_1", "th_x", `{"state":"st_a"}`),
 		envE(15, t0, event.TypeAllocationOpened, "wr_1", "al_a", `{"quantity":1,"requirement":"req_r","resource":"rs_r","thing":"th_x"}`),
+		envE(16, t0, event.TypeResourceTypeDefined, "wr_1", "rt_m", `{"name":"machine"}`),
+		envE(17, t0, event.TypeResourceSuperseded, "wr_1", "rs_r", `{"capacity":2,"kind":"reusable","name":"Reviewers","type":"rt_m"}`),
 	}
 }
 
@@ -201,6 +203,8 @@ func TestCloneIsIndependent(t *testing.T) {
 		{"States entry", func(c *Projection) { c.States["st_p"].Name = "mutated" }},
 		{"Types map", func(c *Projection) { c.Types["ty_new"] = &ThingType{Name: "x"} }},
 		{"Types entry", func(c *Projection) { c.Types["ty_t"].Color = "mutated" }},
+		{"ResourceTypes map", func(c *Projection) { c.ResourceTypes["rt_new"] = &ResourceType{Name: "x"} }},
+		{"ResourceTypes entry", func(c *Projection) { c.ResourceTypes["rt_m"].Color = "mutated" }},
 		{"Capabilities map", func(c *Projection) { c.Capabilities["cap_new"] = &Capability{} }},
 		{"Capabilities entry", func(c *Projection) { c.Capabilities["cap_c"].Name = "mutated" }},
 		{"Projects map", func(c *Projection) { c.Projects["pr_new"] = &Project{} }},

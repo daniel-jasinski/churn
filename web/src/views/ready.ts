@@ -6,6 +6,7 @@ import { h, select } from '../dom';
 import { store } from '../store';
 import { badgeRow, projectName, reqChips, reqChipsOf, scoreBlock, starveNote, thingLink, typeChip } from '../ui/bits';
 import { openBulkAdd } from '../ui/bulkAdd';
+import { openProjectEditor } from '../ui/projectEditor';
 import { openThingEditor } from '../ui/thingEditor';
 import { actionsFor, repropose, transitionTo } from '../ui/transition';
 
@@ -13,6 +14,23 @@ import { actionsFor, repropose, transitionTo } from '../ui/transition';
 const filter = { project: '', type: '', capability: '', text: '' };
 
 export function renderReady(root: HTMLElement): void {
+  if (store.projects.length === 0) {
+    // Fresh workspace: point at the one action that unlocks everything else.
+    root.replaceChildren(h('div', { class: 'centered onboard' },
+      h('h2', null, 'Welcome to churn'),
+      h('p', null, 'This workspace is empty. Work lives in ', h('b', null, 'projects'),
+        ' — dependency graphs of things — worked with the shared ', h('b', null, 'resources'), '.'),
+      h('p', null, h('button', {
+        class: 'btn btn-primary mut',
+        onclick: () => openProjectEditor(),
+      }, 'Create your first project')),
+      h('p', { class: 'muted' },
+        'Then add things here (single or ', h('b', null, 'Bulk add'), '), declare resources on the ',
+        h('a', { href: '#/resources' }, 'resource board'),
+        ', and tune the vocabulary of states, types and capabilities under ',
+        h('a', { href: '#/vocab' }, 'Vocab'), '. Sensible default states are already in place.')));
+    return;
+  }
   const toolbar = h('div', { class: 'toolbar' },
     select([{ value: '', label: 'all projects' },
       ...store.projects.map((p) => ({ value: p.id, label: p.name }))],

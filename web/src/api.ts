@@ -72,6 +72,7 @@ export interface Resource {
   kind: 'reusable' | 'consumable';
   named: boolean;
   capacity: number;
+  type?: string;
   metadata?: Record<string, unknown>;
   capabilities?: string[];
   available: boolean;

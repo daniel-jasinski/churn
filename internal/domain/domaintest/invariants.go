@@ -118,13 +118,19 @@ func CheckInvariants(p *domain.Projection) error {
 		}
 	}
 
-	// Resources: named ⇒ capacity 1; capability grants are declared.
+	// Resources: named ⇒ capacity 1; capability grants and the optional
+	// resource type are declared.
 	for id, rs := range p.Resources {
 		if rs.Named && rs.Capacity != 1 {
 			return fmt.Errorf("named resource %s has capacity %d", id, rs.Capacity)
 		}
 		if rs.Capacity < 1 {
 			return fmt.Errorf("resource %s has capacity %d", id, rs.Capacity)
+		}
+		if rs.Type != "" {
+			if _, ok := p.ResourceTypes[rs.Type]; !ok {
+				return fmt.Errorf("resource %s has dangling resource type %s", id, rs.Type)
+			}
 		}
 		for c := range rs.Capabilities {
 			if _, ok := p.Capabilities[c]; !ok {
@@ -168,7 +174,8 @@ func CheckInvariants(p *domain.Projection) error {
 
 	// Versions: every live entity has a version entry.
 	for _, ids := range [][]string{
-		sortedKeys(p.States), sortedKeys(p.Types), sortedKeys(p.Capabilities),
+		sortedKeys(p.States), sortedKeys(p.Types), sortedKeys(p.ResourceTypes),
+		sortedKeys(p.Capabilities),
 		sortedKeys(p.Projects), sortedKeys(p.Things), sortedKeys(p.Dependencies),
 		sortedKeys(p.Requirements), sortedKeys(p.Resources), sortedKeys(p.Allocations),
 	} {

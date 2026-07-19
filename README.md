@@ -85,6 +85,26 @@ Node toolchain. To change the UI, rebuild `dist/` and commit it together
 with the source change — see [web/README.md](web/README.md); a freshness
 test fails the gate if a `web/src` change ships without a rebuild.
 
+### Scripts
+
+The common workflows live in `scripts/` in two equivalent flavors: Git
+Bash (`.sh`) and Windows-native cmd/PowerShell (`.cmd`). Both derive the
+repo root from their own location — run them from anywhere.
+
+| workflow | Git Bash | Windows (cmd.exe) |
+|---|---|---|
+| Release build → `./churn.exe` (trimpath, stripped) | `scripts/build.sh` | `scripts\build.cmd` |
+| Dev server: build + seed `./workspace` (if missing) + serve :8080 | `scripts/dev.sh [serve flags]` | `scripts\dev.cmd [serve flags]` |
+| Full quality gate (gofmt, build, vet, race tests, lint) | `scripts/gate.sh` | `scripts\gate.cmd` |
+| Frontend rebuild (`npm ci` if needed + esbuild → `web/dist`) | `scripts/web-build.sh` | `scripts\web-build.cmd` |
+| Online DB snapshot (timestamped default name) | `scripts/backup.sh <data-dir> [dest]` | `scripts\backup.cmd <data-dir> [dest]` |
+| JSONL log export (timestamped default name) | `scripts/export.sh <data-dir> [out]` | `scripts\export.cmd <data-dir> [out]` |
+
+`SKIP_RACE=1` makes the gate run plain `go test` without the race
+detector — a quick pre-check, not a substitute for the full gate.
+`golangci-lint` is optional: the gate warns and skips when it is not
+installed.
+
 ### Architecture map
 
 | package | responsibility |

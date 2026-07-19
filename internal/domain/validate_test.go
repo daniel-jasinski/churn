@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"churn/internal/event"
+	"churn/internal/match"
 )
 
 // cmd3 is the compact test form of one event: type, entity, payload JSON.
@@ -820,4 +821,93 @@ func TestDuplicateIDRejected(t *testing.T) {
 	// Retraction does not free the id.
 	b.must(cmd3{event.TypeThingRetracted, "th_a", `{}`})
 	b.reject(KindDuplicateID, []string{"th_a"}, thing("th_a", "reborn"))
+}
+
+// ── resource types (§2.3, §5.3): declared-before-use, free supersession,
+// blocked retraction — and NO engine meaning ──
+
+func TestResourceTypeLifecycle(t *testing.T) {
+	b := newWS(t)
+	b.must(cmd3{event.TypeResourceTypeDefined, "rt_person", `{"name":"person"}`})
+
+	// Declared-before-use: an undefined resource type is rejected on create…
+	b.reject(KindUndefinedReference, []string{"rt_ghost"},
+		cmd3{event.TypeResourceCreated, "rs_x", `{"capacity":1,"kind":"reusable","name":"X","type":"rt_ghost"}`})
+	// …and on supersede.
+	b.must(cmd3{event.TypeResourceCreated, "rs_r", `{"capacity":1,"kind":"reusable","name":"R","type":"rt_person"}`})
+	b.reject(KindUndefinedReference, []string{"rt_ghost"},
+		cmd3{event.TypeResourceSuperseded, "rs_r", `{"capacity":1,"kind":"reusable","name":"R","type":"rt_ghost"}`})
+
+	// Supersession is free while referenced: name/color/description are
+	// display facts (§5.3).
+	b.must(cmd3{event.TypeResourceTypeSuperseded, "rt_person", `{"color":"#123","name":"human"}`})
+	if rt := b.p.ResourceTypes["rt_person"]; rt.Name != "human" || rt.Color != "#123" {
+		t.Fatalf("superseded resource type = %+v", rt)
+	}
+
+	// Retraction is blocked while resources reference it; the error
+	// enumerates the referencing ids.
+	b.must(cmd3{event.TypeResourceCreated, "rs_s", `{"capacity":1,"kind":"reusable","name":"S","type":"rt_person"}`})
+	b.reject(KindRetractionBlocked, []string{"rs_r", "rs_s"},
+		cmd3{event.TypeResourceTypeRetracted, "rt_person", `{}`})
+
+	// Superseding the references away frees the retraction.
+	b.must(
+		cmd3{event.TypeResourceSuperseded, "rs_r", `{"capacity":1,"kind":"reusable","name":"R"}`},
+		cmd3{event.TypeResourceSuperseded, "rs_s", `{"capacity":1,"kind":"reusable","name":"S"}`},
+	)
+	b.must(cmd3{event.TypeResourceTypeRetracted, "rt_person", `{}`})
+
+	// Unknown targets are unknown_entity; the retracted id stays burned.
+	b.reject(KindUnknownEntity, []string{"rt_person"},
+		cmd3{event.TypeResourceTypeSuperseded, "rt_person", `{"name":"zombie"}`})
+	b.reject(KindUnknownEntity, []string{"rt_person"},
+		cmd3{event.TypeResourceTypeRetracted, "rt_person", `{}`})
+	b.reject(KindDuplicateID, []string{"rt_person"},
+		cmd3{event.TypeResourceTypeDefined, "rt_person", `{"name":"reborn"}`})
+}
+
+// TestResourceTypeAttachesNoMeaning pins the §2.3 rule: the engine attaches
+// no meaning to resource types. Two workspaces identical except that one
+// resource carries a type behave identically — same match eligibility, same
+// derived views, same acceptance of allocation batches.
+func TestResourceTypeAttachesNoMeaning(t *testing.T) {
+	build := func(typed bool) *tb {
+		b := newWS(t)
+		b.must(cmd3{event.TypeResourceTypeDefined, "rt_t", `{"name":"person"}`})
+		typ := ""
+		if typed {
+			typ = `,"type":"rt_t"`
+		}
+		b.must(
+			cmd3{event.TypeResourceCreated, "rs_1", `{"capacity":1,"kind":"reusable","name":"R1"` + typ + `}`},
+			cmd3{event.TypeCapabilityGranted, "rs_1", `{"capability":"cap_edit"}`},
+		)
+		b.must(thing("th_1", "T1"))
+		b.must(cmd3{event.TypeRequirementAsserted, "req_1", `{"capabilities":["cap_edit"],"quantity":1,"thing":"th_1"}`})
+		return b
+	}
+	typed, untyped := build(true), build(false)
+
+	// Eligibility is computed from capabilities/pins only — the type field
+	// does not even reach match.Resource.
+	req := match.Requirement{ID: "req_1", Quantity: 1, Capabilities: []string{"cap_edit"}}
+	et := match.Eligible(req, match.Resource{ID: "rs_1", Capabilities: typed.p.Resources["rs_1"].Capabilities})
+	eu := match.Eligible(req, match.Resource{ID: "rs_1", Capabilities: untyped.p.Resources["rs_1"].Capabilities})
+	if et != eu || !et {
+		t.Fatalf("eligibility differs by resource type: typed=%v untyped=%v", et, eu)
+	}
+
+	// Derived views (readiness, badges, statuses) are identical.
+	if !reflect.DeepEqual(typed.p.DeriveAll(), untyped.p.DeriveAll()) {
+		t.Fatal("derived views differ between typed and untyped resource")
+	}
+
+	// The same transition-with-allocation batch is accepted in both.
+	activate := []cmd3{
+		{event.TypeThingStateChanged, "th_1", `{"state":"st_act"}`},
+		{event.TypeAllocationOpened, "al_1", `{"quantity":1,"requirement":"req_1","resource":"rs_1","thing":"th_1"}`},
+	}
+	typed.must(activate...)
+	untyped.must(activate...)
 }

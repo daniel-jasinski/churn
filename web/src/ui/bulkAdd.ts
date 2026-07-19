@@ -10,6 +10,8 @@ import { field, h, select } from '../dom';
 import { closeModal, openModal } from '../modal';
 import { store } from '../store';
 import { showError, toast } from '../toast';
+import { openProjectEditor } from './projectEditor';
+import { openTypeEditor } from '../views/vocab';
 
 interface Row {
   name: string;
@@ -20,8 +22,16 @@ interface Row {
 }
 
 export function openBulkAdd(presetProject?: string): void {
-  if (store.projects.length === 0) { toast('Create a project first.', 'error'); return; }
-  if (store.types.length === 0) { toast('Define a thing type first (vocabulary).', 'error'); return; }
+  if (store.projects.length === 0) {
+    toast('Every thing lives in a project — create one first.', 'info', 4000);
+    openProjectEditor(undefined, (p) => openBulkAdd(p.id));
+    return;
+  }
+  if (store.types.length === 0) {
+    toast('Things need a declared type — define your first one.', 'info', 4000);
+    openTypeEditor(undefined, () => openBulkAdd(presetProject));
+    return;
+  }
   const projectSel = select(store.projects.map((p) => ({ value: p.id, label: p.name })),
     presetProject ?? store.projects[0]!.id);
   const rows: Row[] = [{ name: '', type: store.types[0]!.id, parent: '', deps: '' }];

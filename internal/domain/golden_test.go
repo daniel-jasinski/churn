@@ -37,6 +37,7 @@ type resSnap struct {
 	Name         string
 	Named        bool
 	Capacity     int
+	Type         string
 	Capabilities []string
 	Available    bool
 }
@@ -112,7 +113,7 @@ func snapshot(p *domain.Projection) snap {
 		}
 		sort.Strings(caps)
 		s.Resources[id] = resSnap{
-			Name: r.Name, Named: r.Named, Capacity: r.Capacity,
+			Name: r.Name, Named: r.Named, Capacity: r.Capacity, Type: r.Type,
 			Capabilities: caps, Available: r.Available,
 		}
 	}

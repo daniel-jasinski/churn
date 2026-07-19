@@ -318,3 +318,8 @@ input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 /* bulk table */
 .bulk-table input, .bulk-table select { width: 100%; }
 .bulk-actions { margin: 6px 0; }
+
+/* projects view & onboarding */
+.projects-table { max-width: 760px; }
+.onboard { max-width: 520px; }
+.onboard p { margin: 12px 0; }

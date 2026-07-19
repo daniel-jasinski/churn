@@ -12,6 +12,7 @@ import { store } from '../store';
 import { showError, toast } from '../toast';
 import { asOfButton } from '../ui/asof';
 import { badgeRow, reqChipsOf, stateChip, typeChip } from '../ui/bits';
+import { openProjectEditor } from '../ui/projectEditor';
 import { openThingEditor } from '../ui/thingEditor';
 import { actionsFor, repropose, transitionTo } from '../ui/transition';
 
@@ -87,10 +88,14 @@ function renderPicker(root: HTMLElement): void {
     h('div', { class: 'centered' },
       h('h2', null, 'Pick a project'),
       store.projects.length === 0
-        ? h('p', { class: 'empty' }, 'No projects yet — create one from the ready board or via bulk add.')
+        ? h('p', { class: 'empty' }, 'No projects yet — every thing lives in one.')
         : h('ul', { class: 'picker' },
           ...store.projects.map((p) => h('li', null,
-            h('a', { href: `#/graph/${p.id}` }, p.name))))));
+            h('a', { href: `#/graph/${p.id}` }, p.name)))),
+      h('p', null, h('button', {
+        class: 'btn btn-primary mut',
+        onclick: () => openProjectEditor(undefined, (p) => navigate('graph', p.id)),
+      }, '+ New project'))));
 }
 
 async function loadAndDraw(canvas: HTMLElement, panel: HTMLElement, projectId: string, root: HTMLElement): Promise<void> {
