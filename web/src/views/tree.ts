@@ -9,13 +9,15 @@ import { showError } from '../toast';
 import { asOfButton } from '../ui/asof';
 import { badgeRow, typeChip } from '../ui/bits';
 import { openBulkAdd } from '../ui/bulkAdd';
+import { projectSelect } from '../ui/projectSelect';
 import { openThingEditor } from '../ui/thingEditor';
 
 export function renderTree(root: HTMLElement): void {
   const toolbar = h('div', { class: 'toolbar' },
     h('h2', null, 'Hierarchy & progress'),
+    projectSelect({ allowAll: true, onPick: () => renderTree(root) }),
     h('span', { class: 'spacer' }),
-    h('button', { class: 'btn mut', onclick: () => openBulkAdd() }, 'Bulk add'),
+    h('button', { class: 'btn mut', onclick: () => openBulkAdd(store.selectedProject || undefined) }, 'Bulk add'),
     asOfButton());
   const content = h('div', { class: 'tree-wrap' }, h('div', { class: 'empty' }, 'Loading…'));
   root.replaceChildren(toolbar, content);
@@ -61,9 +63,12 @@ function draw(content: HTMLElement, things: Thing[]): void {
   };
 
   const cols = h('div', { class: 'tree-cols' });
-  for (const p of store.projects) {
+  const shownProjects = store.selectedProject
+    ? store.projects.filter((p) => p.id === store.selectedProject)
+    : store.projects;
+  for (const p of shownProjects) {
     const roots = childrenOf(undefined, p.id);
-    if (roots.length === 0 && store.projects.length > 1) continue;
+    if (roots.length === 0 && shownProjects.length > 1) continue;
     cols.append(h('section', { class: 'tree-proj' },
       h('h3', null, h('a', { href: `#/graph/${p.id}` }, p.name)),
       h('div', { class: 'treemap-holder' }, treemap(roots, leafCount)),

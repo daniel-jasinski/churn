@@ -323,3 +323,21 @@ input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 .projects-table { max-width: 760px; }
 .onboard { max-width: 520px; }
 .onboard p { margin: 12px 0; }
+
+/* dependency editor & draw mode */
+.dep-rows { margin: 6px 0; }
+.dep-row { display: flex; gap: 8px; align-items: center; margin: 3px 0; }
+.dep-name { flex: 1; }
+.dep-add { margin: 6px 0; }
+.dep-search { width: 100%; }
+.dep-matches { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.dep-hit {
+  text-align: left; font: inherit; padding: 3px 8px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg3); color: var(--fg);
+}
+.dep-hit:hover { background: color-mix(in srgb, var(--accent) 15%, var(--bg3)); }
+.dep-inbound { margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 4px; }
+.dep-inbound ul { margin: 2px 0; padding-left: 18px; }
+.draw-hint { color: var(--warn); font-weight: 600; font-size: 12px; }
+.cy-canvas.drawing { outline: 2px dashed var(--warn); cursor: crosshair; }
+.chip-new { border-style: dashed; color: var(--accent); }

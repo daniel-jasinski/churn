@@ -13,6 +13,7 @@ import { showError, toast } from '../toast';
 import { asOfButton } from '../ui/asof';
 import { badgeRow, reqChipsOf, stateChip, typeChip } from '../ui/bits';
 import { openProjectEditor } from '../ui/projectEditor';
+import { projectSelect } from '../ui/projectSelect';
 import { openThingEditor } from '../ui/thingEditor';
 import { actionsFor, repropose, transitionTo } from '../ui/transition';
 
@@ -35,20 +36,34 @@ interface ViewState {
   collapsedInit: boolean;
   drawFrom: string | null; // draw-edge mode: chosen source
   drawing: boolean;
+  // drawPreTo: edge mode entered from the panel's "+ required by…" — the
+  // PREREQUISITE is fixed, the next tap picks the dependent.
+  drawPreTo: string | null;
   selected: { kind: 'thing' | 'dep'; id: string } | null;
   zoom?: number;
   pan?: { x: number; y: number };
 }
 
-const vs: ViewState = { project: null, collapsed: new Set(), collapsedInit: false, drawFrom: null, drawing: false, selected: null };
+const vs: ViewState = {
+  project: null, collapsed: new Set(), collapsedInit: false,
+  drawFrom: null, drawing: false, drawPreTo: null, selected: null,
+};
 let cy: ReturnType<typeof cytoscape> | null = null;
 let lastGraph: Graph | null = null;
 
 export function renderGraph(root: HTMLElement, projectId?: string): void {
   if (!projectId) {
-    renderPicker(root);
+    // No project in the route: resolve the sticky selection to a concrete
+    // project (graph needs one) — last selected, else first alphabetically.
+    const concrete = store.concreteProject();
+    if (!concrete) {
+      renderEmpty(root);
+      return;
+    }
+    navigate('graph', concrete);
     return;
   }
+  store.setSelectedProject(projectId); // route is canonical; keep it sticky
   if (vs.project !== projectId) {
     vs.project = projectId;
     vs.collapsed = new Set();
@@ -58,40 +73,52 @@ export function renderGraph(root: HTMLElement, projectId?: string): void {
     vs.pan = undefined;
   }
 
+  const hint = drawHint();
   const toolbar = h('div', { class: 'toolbar' },
-    select(store.projects.map((p) => ({ value: p.id, label: p.name })), projectId,
-      (v) => navigate('graph', v)),
+    projectSelect({ allowAll: false, value: projectId, onPick: (id) => navigate('graph', id) }),
     h('button', {
       class: 'btn mut' + (vs.drawing ? ' btn-warn' : ''),
-      title: 'Click a source node, then a target node, to assert a dependency',
+      title: 'Declare that one thing must wait for another (a dependency edge)',
       onclick: () => {
         vs.drawing = !vs.drawing;
         vs.drawFrom = null;
+        vs.drawPreTo = null;
         renderGraph(root, projectId);
       },
-    }, vs.drawing ? '✎ drawing… (Esc)' : '✎ Draw dependency'),
+    }, vs.drawing ? '✕ cancel (Esc)' : '＋ Add dependency'),
+    hint ? h('span', { class: 'draw-hint' }, hint) : null,
     h('button', { class: 'btn mut', onclick: () => openThingEditor(undefined, { project: projectId }) }, '+ Thing'),
     h('span', { class: 'spacer' }),
     h('span', { class: 'legend' },
       ...Object.entries(statusColors).map(([s]) => h('span', { class: 'legend-item' }, statusDot(s), s))),
     asOfButton());
 
-  const canvas = h('div', { class: 'cy-canvas' });
+  const canvas = h('div', { class: 'cy-canvas' + (vs.drawing ? ' drawing' : '') });
   const panel = h('aside', { class: 'side-panel' });
   root.replaceChildren(toolbar, h('div', { class: 'graph-wrap' }, canvas, panel));
 
   void loadAndDraw(canvas, panel, projectId, root);
 }
 
-function renderPicker(root: HTMLElement): void {
+// drawHint spells out the edge direction for the current draw-mode state:
+// a dependency edge means FROM waits for TO (from = dependent, to =
+// prerequisite).
+function drawHint(): string | null {
+  if (!vs.drawing) return null;
+  if (vs.drawPreTo) {
+    return `click the DEPENDENT thing — the one that must wait for ${store.name(vs.drawPreTo)}`;
+  }
+  if (vs.drawFrom) {
+    return `now click the prerequisite — what ${store.name(vs.drawFrom)} must wait for`;
+  }
+  return 'click the DEPENDENT thing first (the one that must wait), then its prerequisite';
+}
+
+function renderEmpty(root: HTMLElement): void {
   root.replaceChildren(
     h('div', { class: 'centered' },
-      h('h2', null, 'Pick a project'),
-      store.projects.length === 0
-        ? h('p', { class: 'empty' }, 'No projects yet — every thing lives in one.')
-        : h('ul', { class: 'picker' },
-          ...store.projects.map((p) => h('li', null,
-            h('a', { href: `#/graph/${p.id}` }, p.name)))),
+      h('h2', null, 'No projects yet'),
+      h('p', { class: 'empty' }, 'Every thing lives in a project.'),
       h('p', null, h('button', {
         class: 'btn btn-primary mut',
         onclick: () => openProjectEditor(undefined, (p) => navigate('graph', p.id)),
@@ -293,6 +320,11 @@ async function loadAndDraw(canvas: HTMLElement, panel: HTMLElement, projectId: s
   }
   cy.on('zoom pan', () => { vs.zoom = cy!.zoom(); vs.pan = cy!.pan(); });
 
+  // draw-mode source highlight survives re-renders
+  if (vs.drawing && vs.drawFrom && byId.has(vs.drawFrom)) {
+    cy.$('#' + cssEscape(displayOf(vs.drawFrom))).addClass('draw-src');
+  }
+
   // hover cone: upstream = what it waits on (targets), downstream = what waits on it
   cy.on('mouseover', 'node', (ev: { target: { id(): string } }) => {
     if (vs.drawing) return;
@@ -324,10 +356,22 @@ async function loadAndDraw(canvas: HTMLElement, panel: HTMLElement, projectId: s
     const t = byId.get(id);
     if (!t) return;
     if (vs.drawing) {
+      if (vs.drawPreTo) {
+        // prerequisite preset (panel "+ required by…"): this tap = dependent
+        if (id !== vs.drawPreTo) {
+          const to = vs.drawPreTo;
+          vs.drawPreTo = null;
+          vs.drawing = false;
+          askOnAbandoned(id, to, root);
+        }
+        return;
+      }
       if (!vs.drawFrom) {
         vs.drawFrom = id;
         cy!.$('#' + cssEscape(id)).addClass('draw-src');
-        toast(`Source: ${t.name} — now click the target it depends on.`, 'info', 3000);
+        toast(`Dependent: ${t.name} — now click the prerequisite it must wait for.`, 'info', 4000);
+        const hintEl = root.querySelector('.draw-hint');
+        if (hintEl) hintEl.textContent = drawHint();
       } else if (vs.drawFrom !== id) {
         const from = vs.drawFrom;
         vs.drawFrom = null;
@@ -378,6 +422,7 @@ async function loadAndDraw(canvas: HTMLElement, panel: HTMLElement, projectId: s
     if (e.key === 'Escape' && vs.drawing) {
       vs.drawing = false;
       vs.drawFrom = null;
+      vs.drawPreTo = null;
       renderGraph(root, projectId);
     }
   };
@@ -477,6 +522,30 @@ function renderThingPanel(panel: HTMLElement, t: Thing, g: Graph, root: HTMLElem
       title: 'Add a child step (offers the §2.1 conversion when this is a worked leaf)',
       onclick: () => openThingEditor(undefined, { project: t.project, parent: t.id }),
     }, '+ child'),
+    h('button', {
+      class: 'btn btn-sm',
+      title: `Declare a prerequisite of ${t.name}: enter edge mode with this as the dependent, then click what it must wait for`,
+      onclick: () => {
+        vs.drawing = true;
+        vs.drawFrom = t.id;
+        vs.drawPreTo = null;
+        renderGraph(root, vs.project!);
+      },
+    }, '+ depends on…'),
+    h('button', {
+      class: 'btn btn-sm',
+      title: `Declare a dependent of ${t.name}: enter edge mode with this as the prerequisite, then click what must wait for it`,
+      onclick: () => {
+        vs.drawing = true;
+        vs.drawPreTo = t.id;
+        vs.drawFrom = null;
+        renderGraph(root, vs.project!);
+      },
+    }, '+ required by…'),
+    h('button', {
+      class: 'btn btn-sm', title: 'Edit dependencies in the thing editor',
+      onclick: () => openThingEditor(t, { focus: 'deps' }),
+    }, 'Deps'),
     h('button', {
       class: 'btn btn-sm btn-danger',
       onclick: async () => {

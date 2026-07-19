@@ -7,11 +7,13 @@ import { store } from '../store';
 import { badgeRow, projectName, reqChips, reqChipsOf, scoreBlock, starveNote, thingLink, typeChip } from '../ui/bits';
 import { openBulkAdd } from '../ui/bulkAdd';
 import { openProjectEditor } from '../ui/projectEditor';
+import { projectSelect } from '../ui/projectSelect';
 import { openThingEditor } from '../ui/thingEditor';
 import { actionsFor, repropose, transitionTo } from '../ui/transition';
 
-// module-level filter state survives re-renders
-const filter = { project: '', type: '', capability: '', text: '' };
+// module-level filter state survives re-renders; the project filter is the
+// STICKY cross-tab selection (store.selectedProject).
+const filter = { type: '', capability: '', text: '' };
 
 export function renderReady(root: HTMLElement): void {
   if (store.projects.length === 0) {
@@ -31,10 +33,9 @@ export function renderReady(root: HTMLElement): void {
         h('a', { href: '#/vocab' }, 'Vocab'), '. Sensible default states are already in place.')));
     return;
   }
+  const projFilter = () => store.selectedProject;
   const toolbar = h('div', { class: 'toolbar' },
-    select([{ value: '', label: 'all projects' },
-      ...store.projects.map((p) => ({ value: p.id, label: p.name }))],
-    filter.project, (v) => { filter.project = v; renderReady(root); }),
+    projectSelect({ allowAll: true, onPick: () => renderReady(root) }),
     select([{ value: '', label: 'all types' },
       ...store.types.map((t) => ({ value: t.id, label: t.name }))],
     filter.type, (v) => { filter.type = v; renderReady(root); }),
@@ -43,11 +44,11 @@ export function renderReady(root: HTMLElement): void {
     filter.capability, (v) => { filter.capability = v; renderReady(root); }),
     textFilter(root),
     h('span', { class: 'spacer' }),
-    h('button', { class: 'btn mut', onclick: () => openBulkAdd(filter.project || undefined) }, 'Bulk add'),
-    h('button', { class: 'btn btn-primary mut', onclick: () => openThingEditor(undefined, { project: filter.project || undefined }) }, '+ New thing'));
+    h('button', { class: 'btn mut', onclick: () => openBulkAdd(projFilter() || undefined) }, 'Bulk add'),
+    h('button', { class: 'btn btn-primary mut', onclick: () => openThingEditor(undefined, { project: projFilter() || undefined }) }, '+ New thing'));
 
   const matchThing = (t: Thing): boolean => {
-    if (filter.project && t.project !== filter.project) return false;
+    if (projFilter() && t.project !== projFilter()) return false;
     if (filter.type && t.type !== filter.type) return false;
     if (filter.text && !t.name.toLowerCase().includes(filter.text.toLowerCase())) return false;
     if (filter.capability) {
@@ -57,7 +58,7 @@ export function renderReady(root: HTMLElement): void {
     return true;
   };
   const matchEntry = (e: ReadyEntry): boolean => {
-    if (filter.project && e.project !== filter.project) return false;
+    if (projFilter() && e.project !== projFilter()) return false;
     if (filter.type && e.type !== filter.type) return false;
     if (filter.capability && !e.requirements.some((r) => r.capabilities?.includes(filter.capability))) return false;
     const t = store.thing(e.thing);
@@ -156,7 +157,11 @@ function readyCard(e: ReadyEntry): HTMLElement {
         class: 'btn btn-primary btn-sm',
         onclick: () => void transitionTo(t, 'active'),
       }, 'Start'),
-      h('button', { class: 'btn btn-sm', onclick: () => openThingEditor(t) }, 'Edit')));
+      h('button', { class: 'btn btn-sm', onclick: () => openThingEditor(t) }, 'Edit'),
+      h('button', {
+        class: 'btn btn-sm', title: 'Edit what this thing depends on',
+        onclick: () => openThingEditor(t, { focus: 'deps' }),
+      }, 'Deps')));
   return card;
 }
 
@@ -182,7 +187,12 @@ function thingCard(t: Thing, opts: { showReqs?: boolean; showAllocs?: boolean; h
       onclick: () => void repropose(t),
     }, 'Re-propose'));
   }
-  actions.append(h('button', { class: 'btn btn-sm', onclick: () => openThingEditor(t) }, 'Edit'));
+  actions.append(
+    h('button', { class: 'btn btn-sm', onclick: () => openThingEditor(t) }, 'Edit'),
+    h('button', {
+      class: 'btn btn-sm', title: 'Edit what this thing depends on',
+      onclick: () => openThingEditor(t, { focus: 'deps' }),
+    }, 'Deps'));
   card.append(actions);
   return card;
 }

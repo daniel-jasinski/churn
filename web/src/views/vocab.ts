@@ -1,8 +1,8 @@
 // views/vocab.ts — the vocabulary manager (§5.3): states (semantic binding —
-// locked while occupied), thing types, capability tags. All entries are
-// ordinary entities: define / supersede / retract.
+// locked while occupied), thing types, resource types, capability tags. All
+// entries are ordinary entities: define / supersede / retract.
 
-import { api, CapabilityDef, Semantic, StateDef, TypeDef } from '../api';
+import { api, CapabilityDef, ResourceType, Semantic, StateDef, TypeDef } from '../api';
 import { chip, field, h, select } from '../dom';
 import { closeModal, openModal } from '../modal';
 import { store } from '../store';
@@ -12,7 +12,7 @@ const SEMANTICS: Semantic[] = ['pending', 'active', 'paused', 'satisfied', 'aban
 
 export function renderVocab(root: HTMLElement): void {
   root.replaceChildren(h('div', { class: 'vocab-cols' },
-    statesCol(), typesCol(), capsCol()));
+    statesCol(), typesCol(), resourceTypesCol(), capsCol()));
 }
 
 function occupiedCount(stateId: string): number {
@@ -112,6 +112,49 @@ export function openTypeEditor(existing?: TypeDef, onSaved?: () => void): void {
   openModal(existing ? `Edit type ${existing.name}` : 'New type', body);
 }
 
+function resourceTypesCol(): HTMLElement {
+  return h('section', { class: 'vocab-col' },
+    h('h2', null, 'Resource types'),
+    h('p', { class: 'muted tiny' },
+      'Categorize resources (person, room, tool…) — display and filtering only; the engine matches on capabilities, never on type.'),
+    h('ul', { class: 'vocab-list' }, ...store.resourceTypes.map((t) => h('li', null,
+      chip(t.name, t.color, 'chip-type'),
+      t.description ? h('span', { class: 'muted tiny' }, ' ' + t.description) : null,
+      h('span', { class: 'spacer' }),
+      h('button', { class: 'btn btn-sm mut', onclick: () => openResourceTypeEditor(t) }, 'edit'),
+      h('button', { class: 'btn btn-sm btn-danger mut', onclick: () => void del(() => api.deleteResourceType(t.id), t.name) }, '×')))),
+    h('button', { class: 'btn mut', onclick: () => openResourceTypeEditor() }, '+ New resource type'));
+}
+
+/** openResourceTypeEditor defines or edits a resource type; onSaved runs
+ * after a successful define + refresh (the resource dialog uses it). */
+export function openResourceTypeEditor(existing?: ResourceType, onSaved?: (rt: ResourceType) => void): void {
+  const nameIn = h('input', { type: 'text', value: existing?.name ?? '' });
+  const colorIn = h('input', { type: 'color', value: existing?.color || '#6b7280' });
+  const descIn = h('input', { type: 'text', value: existing?.description ?? '' });
+  const body = h('div', null,
+    field('Name', nameIn), field('Color', colorIn), field('Description', descIn),
+    h('div', { class: 'modal-actions' },
+      h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
+      h('button', {
+        class: 'btn btn-primary',
+        onclick: async () => {
+          const data = { name: nameIn.value.trim(), color: colorIn.value, description: descIn.value.trim() || undefined };
+          if (!data.name) { toast('Name is required.', 'error'); return; }
+          try {
+            let rt: ResourceType;
+            if (existing) rt = await api.updateResourceType(existing.id, data, existing.version);
+            else rt = await api.createResourceType(data);
+            closeModal();
+            await store.refresh();
+            if (!existing && onSaved) onSaved(rt);
+          } catch (e) { showError(e); }
+        },
+      }, existing ? 'Save' : 'Define')));
+  openModal(existing ? `Edit resource type ${existing.name}` : 'New resource type', body);
+  nameIn.focus();
+}
+
 function capsCol(): HTMLElement {
   return h('section', { class: 'vocab-col' },
     h('h2', null, 'Capabilities'),
@@ -121,12 +164,15 @@ function capsCol(): HTMLElement {
       chip(c.name, undefined, 'chip-cap'),
       c.description ? h('span', { class: 'muted tiny' }, ' ' + c.description) : null,
       h('span', { class: 'spacer' }),
-      h('button', { class: 'btn btn-sm mut', onclick: () => capEditor(c) }, 'edit'),
+      h('button', { class: 'btn btn-sm mut', onclick: () => openCapabilityEditor(c) }, 'edit'),
       h('button', { class: 'btn btn-sm btn-danger mut', onclick: () => void del(() => api.deleteCapability(c.id), c.name) }, '×')))),
-    h('button', { class: 'btn mut', onclick: () => capEditor() }, '+ New capability'));
+    h('button', { class: 'btn mut', onclick: () => openCapabilityEditor() }, '+ New capability'));
 }
 
-function capEditor(existing?: CapabilityDef): void {
+/** openCapabilityEditor defines or edits a capability tag; onSaved runs
+ * after a successful define + refresh (the requirement editor and the
+ * resource grant flow use it to pick up the fresh tag). */
+export function openCapabilityEditor(existing?: CapabilityDef, onSaved?: (c: CapabilityDef) => void): void {
   const nameIn = h('input', { type: 'text', value: existing?.name ?? '' });
   const descIn = h('input', { type: 'text', value: existing?.description ?? '' });
   const body = h('div', null,
@@ -139,14 +185,17 @@ function capEditor(existing?: CapabilityDef): void {
           const data = { name: nameIn.value.trim(), description: descIn.value.trim() || undefined };
           if (!data.name) { toast('Name is required.', 'error'); return; }
           try {
-            if (existing) await api.updateCapability(existing.id, data, existing.version);
-            else await api.createCapability(data);
+            let c: CapabilityDef;
+            if (existing) c = await api.updateCapability(existing.id, data, existing.version);
+            else c = await api.createCapability(data);
             closeModal();
             await store.refresh();
+            if (!existing && onSaved) onSaved(c);
           } catch (e) { showError(e); }
         },
       }, existing ? 'Save' : 'Define')));
   openModal(existing ? `Edit capability ${existing.name}` : 'New capability', body);
+  nameIn.focus();
 }
 
 async function del(fn: () => Promise<unknown>, name: string): Promise<void> {

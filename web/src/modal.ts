@@ -7,9 +7,13 @@ import { h } from './dom';
 
 const stack: HTMLElement[] = [];
 
-/** closeModal removes the topmost open modal. */
+/** closeModal removes the topmost open modal and refocuses the one it
+ * reveals — the Escape handler is per-overlay keydown, so without refocus
+ * the revealed dialog would ignore Escape until clicked. */
 export function closeModal(): void {
   stack.pop()?.remove();
+  const top = stack[stack.length - 1];
+  top?.querySelector<HTMLElement>('.modal')?.focus();
 }
 
 /** openModal shows `content` in an overlay (stacked over any open modal)

@@ -108,6 +108,14 @@ export interface CapabilityDef {
   version: number;
 }
 
+export interface ResourceType {
+  id: string;
+  name: string;
+  color?: string;
+  description?: string;
+  version: number;
+}
+
 export interface WorkspaceCounts {
   projects: number;
   things: number;
@@ -116,6 +124,7 @@ export interface WorkspaceCounts {
   requirements: number;
   states: number;
   types: number;
+  resource_types: number;
   capabilities: number;
   open_allocations: number;
   closed_allocations: number;
@@ -306,7 +315,7 @@ export interface TransitionResult {
 // each "$N" to the minted id.
 export interface BatchOp {
   op: 'create' | 'supersede' | 'retract' | 'transition' | 'availability' | 'grant' | 'revoke';
-  kind: 'project' | 'thing' | 'resource' | 'dependency' | 'requirement' | 'state' | 'type' | 'capability';
+  kind: 'project' | 'thing' | 'resource' | 'dependency' | 'requirement' | 'state' | 'type' | 'capability' | 'resource_type';
   id?: string;
   data?: unknown;
 }
@@ -459,6 +468,7 @@ export const api = {
   states: () => get<StateDef[]>('/vocab/states'),
   types: () => get<TypeDef[]>('/vocab/types'),
   capabilities: () => get<CapabilityDef[]>('/vocab/capabilities'),
+  resourceTypes: () => get<ResourceType[]>('/vocab/resource-types'),
   graph: (project: string, asOf?: string) =>
     get<Graph>(`/projects/${project}/graph` + (asOf ? `?as_of=${encodeURIComponent(asOf)}` : '')),
   ready: (f: { project?: string; type?: string; subtree?: string; capability?: string } = {}) => {
@@ -490,9 +500,9 @@ export const api = {
     req<Thing>('PATCH', `/things/${id}`, data, ifMatch(version)),
   deleteThing: (id: string) => req<unknown>('DELETE', `/things/${id}`),
 
-  createResource: (data: { name: string; kind: string; named: boolean; capacity: number; metadata?: unknown }) =>
+  createResource: (data: { name: string; kind: string; named: boolean; capacity: number; type?: string; metadata?: unknown }) =>
     req<Resource>('POST', '/resources', data),
-  updateResource: (id: string, data: { name: string; kind: string; named: boolean; capacity: number; metadata?: unknown }, version?: number) =>
+  updateResource: (id: string, data: { name: string; kind: string; named: boolean; capacity: number; type?: string; metadata?: unknown }, version?: number) =>
     req<Resource>('PATCH', `/resources/${id}`, data, ifMatch(version)),
   deleteResource: (id: string) => req<unknown>('DELETE', `/resources/${id}`),
   setAvailability: (id: string, available: boolean, note?: string) =>
@@ -527,6 +537,11 @@ export const api = {
   updateCapability: (id: string, data: { name: string; description?: string }, version?: number) =>
     req<CapabilityDef>('PATCH', `/vocab/capabilities/${id}`, data, ifMatch(version)),
   deleteCapability: (id: string) => req<unknown>('DELETE', `/vocab/capabilities/${id}`),
+  createResourceType: (data: { name: string; color?: string; description?: string }) =>
+    req<ResourceType>('POST', '/vocab/resource-types', data),
+  updateResourceType: (id: string, data: { name: string; color?: string; description?: string }, version?: number) =>
+    req<ResourceType>('PATCH', `/vocab/resource-types/${id}`, data, ifMatch(version)),
+  deleteResourceType: (id: string) => req<unknown>('DELETE', `/vocab/resource-types/${id}`),
 
   transition: (thing: string, body: { state: string; confirm?: boolean; proposal?: string }) =>
     req<TransitionResult>('POST', `/things/${thing}/transition`, body),

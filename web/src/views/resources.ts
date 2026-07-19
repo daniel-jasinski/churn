@@ -8,10 +8,29 @@ import { closeModal, openModal } from '../modal';
 import { store } from '../store';
 import { showError, toast } from '../toast';
 import { reqText } from '../ui/bits';
+import { openCapabilityEditor, openResourceTypeEditor } from './vocab';
+
+// typeFilter is the board's resource-type filter ('' = all); module-level so
+// it survives re-renders.
+let typeFilter = '';
 
 export function renderResources(root: HTMLElement): void {
+  // A stale filter (type retracted, or a different workspace served on the
+  // same origin) must reset, or the board renders empty with the dropdown
+  // showing "all" and no change event left to clear it.
+  if (typeFilter && typeFilter !== '__untyped__'
+    && !store.resourceTypes.some((t) => t.id === typeFilter)) {
+    typeFilter = '';
+  }
   const toolbar = h('div', { class: 'toolbar' },
     h('h2', null, 'Resources'),
+    store.resourceTypes.length > 0
+      ? select([
+        { value: '', label: 'all resource types' },
+        ...store.resourceTypes.map((t) => ({ value: t.id, label: t.name })),
+        { value: '__untyped__', label: '(untyped)' },
+      ], typeFilter, (v) => { typeFilter = v; renderResources(root); })
+      : null,
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn btn-primary mut', onclick: () => openResourceEditor() }, '+ New resource'));
   const body = h('div', { class: 'res-rows' }, h('div', { class: 'empty' }, 'Loading…'));
@@ -31,7 +50,16 @@ export function renderResources(root: HTMLElement): void {
         h('p', { class: 'muted' }, modelingGuidance())));
       return;
     }
-    body.replaceChildren(...rows.map(row));
+    const shown = rows.filter((r) => {
+      if (!typeFilter) return true;
+      if (typeFilter === '__untyped__') return !r.resource.type;
+      return r.resource.type === typeFilter;
+    });
+    body.replaceChildren(
+      shown.length === 0
+        ? h('div', { class: 'empty' }, 'No resources of this type.')
+        : h('span'),
+      ...shown.map(row));
   })();
 }
 
@@ -72,6 +100,7 @@ function row(r: ResourceBoardRow): HTMLElement {
   return h('section', { class: 'res-row' + (res.available ? '' : ' res-down') },
     h('header', { class: 'res-head' },
       h('b', null, res.name),
+      res.type ? chip(store.resourceType(res.type)?.name ?? res.type, store.resourceType(res.type)?.color, 'chip-type') : null,
       res.named ? chip('named', undefined, 'chip-dim') : chip(`pool ×${res.capacity}`, undefined, 'chip-dim'),
       res.over_allocated ? h('span', { class: 'badge badge-alert', title: 'allocated units exceed effective capacity (§2.5)' }, '▲ over-allocated') : null,
       h('span', { class: 'spacer' }),
@@ -104,14 +133,27 @@ function row(r: ResourceBoardRow): HTMLElement {
             h('span', { class: 'muted' }, ` (${q.requirements.length} req)`)))))));
 }
 
+// grantButton is always visible: ungranted capabilities to pick, plus an
+// inline "+ new capability…" that defines a tag (stacked dialog) and grants
+// it immediately — the zero-capability workspace is never a dead end.
 function grantButton(res: Resource): HTMLElement {
   const have = new Set(res.capabilities ?? []);
   const options = store.capabilities.filter((c) => !have.has(c.id));
-  if (options.length === 0) return h('span');
-  const sel = select([{ value: '', label: '+ grant…' },
-    ...options.map((c) => ({ value: c.id, label: c.name }))], '', async (v) => {
+  const grant = async (capId: string) => {
+    try { await api.grantCapability(res.id, capId); await store.refresh(); } catch (e) { showError(e); }
+  };
+  const sel = select([
+    { value: '', label: '+ grant…' },
+    ...options.map((c) => ({ value: c.id, label: c.name })),
+    { value: '__new__', label: '+ new capability…' },
+  ], '', (v) => {
     if (!v) return;
-    try { await api.grantCapability(res.id, v); await store.refresh(); } catch (e) { showError(e); }
+    if (v === '__new__') {
+      sel.value = '';
+      openCapabilityEditor(undefined, (c) => void grant(c.id));
+      return;
+    }
+    void grant(v);
   });
   sel.className = 'grant-sel mut';
   return sel;
@@ -171,10 +213,33 @@ export function openResourceEditor(existing?: Resource): void {
     renderCapacity(v === 'named');
   });
   renderCapacity(existing?.named ?? false);
+
+  // Optional resource type (categorization only), with the stacked "+ New
+  // type…" dialog; the created type is selected here on success.
+  const NEW_RT = '__new__';
+  const rtOpts = () => [
+    { value: '', label: '— none —' },
+    ...store.resourceTypes.map((t) => ({ value: t.id, label: t.name })),
+    { value: NEW_RT, label: '+ New type…' },
+  ];
+  const typeSel = select(rtOpts(), existing?.type ?? '');
+  let lastType = typeSel.value;
+  typeSel.addEventListener('change', () => {
+    if (typeSel.value !== NEW_RT) { lastType = typeSel.value; return; }
+    typeSel.value = lastType; // revert until the dialog succeeds
+    openResourceTypeEditor(undefined, (rt) => {
+      typeSel.replaceChildren(...rtOpts().map((o) =>
+        h('option', { value: o.value, selected: o.value === rt.id }, o.label)));
+      typeSel.value = rt.id;
+      lastType = rt.id;
+    });
+  });
+
   const body = h('div', null,
     field('Name', nameIn),
     field('Shape', namedSel, modelingGuidance()),
     capWrap,
+    field('Type', typeSel, 'optional categorization (person, room, tool…) — the engine matches on capabilities, never on type'),
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
       h('button', {
@@ -188,7 +253,7 @@ export function openResourceEditor(existing?: Resource): void {
           const data = {
             name, kind: 'reusable', named,
             capacity: named ? 1 : Math.max(1, Number(capIn.value) || 1),
-            ...(existing?.type ? { type: existing.type } : {}),
+            ...(typeSel.value ? { type: typeSel.value } : {}),
             ...(existing?.metadata ? { metadata: existing.metadata } : {}),
           };
           try {

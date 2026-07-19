@@ -1,14 +1,15 @@
 // ui/thingEditor.ts — create/edit modal for things: name, type, project,
-// parent, metadata key-values, and the requirements editor.
+// parent, metadata key-values, the requirements editor, and the
+// dependencies editor (outbound editable, inbound shown read-only).
 
-import { api, BatchOp, Requirement, Thing } from '../api';
+import { api, BatchOp, Dependency, Requirement, Thing } from '../api';
 import { field, h, select } from '../dom';
 import { closeModal, openModal } from '../modal';
 import { store } from '../store';
 import { showError, toast } from '../toast';
 import { isPromotionRejection, offerPromotion } from './promotion';
 import { openProjectEditor } from './projectEditor';
-import { openTypeEditor } from '../views/vocab';
+import { openCapabilityEditor, openTypeEditor } from '../views/vocab';
 
 interface ReqRow {
   existing?: Requirement; // present = keep unless removed
@@ -18,7 +19,14 @@ interface ReqRow {
   capabilities: string[];
 }
 
-export function openThingEditor(existing?: Thing, preset: { project?: string; parent?: string } = {}): void {
+interface DepRow {
+  existing?: Dependency; // present = keep unless removed
+  removed: boolean;
+  to: string; // prerequisite thing id
+  policy: 'ignore' | 'block';
+}
+
+export function openThingEditor(existing?: Thing, preset: { project?: string; parent?: string; focus?: 'deps' } = {}): void {
   const isEdit = !!existing;
   if (store.projects.length === 0) {
     // Every thing lives in a project: offer the project dialog first, then
@@ -116,6 +124,9 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
           (v) => { row.pin = v; });
         if (namedResources.length === 0) detail = h('span', { class: 'muted' }, 'no named resources');
       } else {
+        // Capability multi-select, with the inline "+ new…" so a
+        // zero-capability workspace is never a dead end: the stacked dialog
+        // defines the tag and selects it on this row.
         detail = h('span', { class: 'cap-picks' },
           ...store.capabilities.map((c) => {
             const on = row.capabilities.includes(c.id);
@@ -128,7 +139,18 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
                 renderReqRows();
               },
             }, c.name);
-          }));
+          }),
+          h('button', {
+            class: 'chip chip-toggle chip-new',
+            title: 'define a new capability tag and select it here',
+            onclick: (e: MouseEvent) => {
+              e.preventDefault();
+              openCapabilityEditor(undefined, (c) => {
+                row.capabilities.push(c.id);
+                renderReqRows();
+              });
+            },
+          }, '+ new capability…'));
       }
       reqBody.appendChild(h('div', { class: 'req-row' },
         qty, modeSel, detail,
@@ -139,6 +161,76 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
     }
   };
   renderReqRows();
+
+  // ── dependencies (§2.2): outbound editable, inbound read-only ──
+  const depRows: DepRow[] = (existing
+    ? store.dependencies.filter((d) => d.from === existing.id)
+    : []).map((d) => ({ existing: d, removed: false, to: d.to, policy: d.on_abandoned }));
+  const depBody = h('div', { class: 'dep-rows' });
+  const depSearch = h('input', {
+    type: 'search', placeholder: 'add dependency: search things by name…', class: 'dep-search',
+  });
+  const depMatches = h('div', { class: 'dep-matches' });
+
+  const thingLabel = (t: Thing): string => {
+    let l = t.name;
+    if (t.project !== projectId) l += ` — ${store.project(t.project)?.name ?? t.project}`;
+    if (t.composite) l += ' (composite: the whole subtree, §2.1)';
+    return l;
+  };
+
+  const renderDepRows = () => {
+    depBody.replaceChildren();
+    for (const row of depRows) {
+      if (row.removed) continue;
+      const target = store.thing(row.to);
+      const policySel = select([
+        { value: 'ignore', label: 'on abandon: unblock + warn (default)' },
+        { value: 'block', label: 'on abandon: stay blocked' },
+      ], row.policy, (v) => { row.policy = v as DepRow['policy']; });
+      policySel.disabled = !!row.existing; // edges have no supersession (§5.2)
+      if (row.existing) policySel.title = 'edges have no supersession — remove and re-add to change the policy';
+      depBody.appendChild(h('div', { class: 'dep-row' },
+        h('span', { class: 'dep-name' }, target ? thingLabel(target) : row.to),
+        policySel,
+        h('button', {
+          class: 'btn btn-ghost', title: 'remove dependency',
+          onclick: () => {
+            if (row.existing) row.removed = true;
+            else depRows.splice(depRows.indexOf(row), 1);
+            renderDepRows();
+          },
+        }, '×')));
+    }
+  };
+  renderDepRows();
+
+  const renderDepMatches = () => {
+    depMatches.replaceChildren();
+    const q = depSearch.value.trim().toLowerCase();
+    if (!q) return;
+    const taken = new Set(depRows.filter((r) => !r.removed).map((r) => r.to));
+    const hits = store.things
+      .filter((t) => t.id !== existing?.id && !taken.has(t.id) && t.name.toLowerCase().includes(q))
+      .slice(0, 8);
+    if (hits.length === 0) {
+      depMatches.appendChild(h('div', { class: 'muted tiny' }, 'no matching thing'));
+      return;
+    }
+    for (const t of hits) {
+      depMatches.appendChild(h('button', {
+        class: 'dep-hit',
+        onclick: (e: MouseEvent) => {
+          e.preventDefault();
+          depRows.push({ removed: false, to: t.id, policy: 'ignore' });
+          depSearch.value = '';
+          depMatches.replaceChildren();
+          renderDepRows();
+        },
+      }, thingLabel(t)));
+    }
+  };
+  depSearch.addEventListener('input', renderDepMatches);
 
   const save = async () => {
     const name = nameIn.value.trim();
@@ -186,6 +278,17 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
           },
         });
       }
+      // dependency edits ride the same atomic batch
+      for (const row of depRows) {
+        if (row.existing && row.removed) ops.push({ op: 'retract', kind: 'dependency', id: row.existing.id });
+      }
+      for (const row of depRows) {
+        if (row.existing || row.removed) continue;
+        ops.push({
+          op: 'create', kind: 'dependency',
+          data: { from: thingRef, to: row.to, on_abandoned: row.policy },
+        });
+      }
       await api.batch('commit', ops, isEdit ? { [existing.id]: existing.version } : undefined);
       closeModal();
       toast(isEdit ? `${name} updated` : `${name} created`, 'ok', 2500);
@@ -221,10 +324,41 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
         class: 'btn btn-ghost',
         onclick: () => { reqRows.push({ removed: false, quantity: 1, pin: '', capabilities: [] }); renderReqRows(); },
       }, '+ requirement')),
+    depsDetails(),
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
       h('button', { class: 'btn btn-primary', onclick: () => void save() }, isEdit ? 'Save' : 'Create')));
 
+  function depsDetails(): HTMLElement {
+    const inbound = existing ? store.dependencies.filter((d) => d.to === existing.id) : [];
+    const el = h('details', { class: 'sub', id: 'deps-section', open: depRows.length > 0 || preset.focus === 'deps' },
+      h('summary', null, `Dependencies (${depRows.filter((r) => !r.removed).length} outbound)`),
+      h('p', { class: 'muted tiny' },
+        'What this thing must wait for before it can start. Policies when a prerequisite is abandoned: ',
+        h('b', null, 'unblock + warn'), ' lets this proceed with a warning badge (default); ',
+        h('b', null, 'stay blocked'), ' keeps it blocked until the prerequisite is redone or the edge is removed.'),
+      depBody,
+      h('div', { class: 'dep-add' }, depSearch, depMatches),
+      inbound.length > 0
+        ? h('div', { class: 'dep-inbound' },
+          h('h4', null, `Required by (${inbound.length}) — read-only`),
+          h('ul', null, ...inbound.map((d) => {
+            const from = store.thing(d.from);
+            return h('li', null,
+              from ? from.name : d.from,
+              h('span', { class: 'muted tiny' }, ` (${d.on_abandoned === 'block' ? 'blocks on abandon' : 'unblocks + warns'}) `),
+              h('a', { class: 'tiny', href: `#/history/${d.from}` }, 'hist'));
+          })))
+        : null);
+    return el;
+  }
+
   openModal(isEdit ? `Edit ${existing.name}` : 'New thing', body, { wide: true });
-  nameIn.focus();
+  if (preset.focus === 'deps') {
+    const sec = body.querySelector('#deps-section');
+    sec?.scrollIntoView({ block: 'center' });
+    depSearch.focus();
+  } else {
+    nameIn.focus();
+  }
 }
