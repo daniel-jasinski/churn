@@ -6,8 +6,7 @@ them) and a shared resource pool in an append-only event log, and answers —
 at any moment — what is ready to work on, what is blocked and by what, where
 the bottlenecks are, and what to do next. It is deliberately
 ontology-minimal: states, thing types, and capability tags are user-defined
-vocabulary, not schema. The full specification is [DESIGN.md](DESIGN.md);
-the build order and quality gates are [PLAN.md](PLAN.md).
+vocabulary, not schema. The full specification is [DESIGN.md](DESIGN.md).
 
 ## Quickstart
 

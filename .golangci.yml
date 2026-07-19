@@ -1,4 +1,4 @@
-# golangci-lint v2 configuration (PLAN.md M7).
+# golangci-lint v2 configuration.
 #
 # Philosophy: a small, high-signal set — correctness linters everywhere,
 # plus exhaustive on the enum-shaped switches of the event/domain layer so

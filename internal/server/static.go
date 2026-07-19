@@ -1,4 +1,4 @@
-// Static frontend serving (DESIGN.md §5, PLAN.md M6): the embedded web/dist
+// Static frontend serving (DESIGN.md §5): the embedded web/dist
 // bundle behind every non-/api path.
 //
 //	/                  → index.html          Cache-Control: no-store

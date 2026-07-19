@@ -6,7 +6,7 @@ import (
 )
 
 // Error kinds — the machine-readable classification of a batch rejection.
-// The API layer serializes {Kind, Message, IDs} directly (PLAN.md M5).
+// The API layer serializes {Kind, Message, IDs} directly.
 const (
 	// KindStaleVersion: an expected_versions precondition failed; IDs are the
 	// stale entity ids.
