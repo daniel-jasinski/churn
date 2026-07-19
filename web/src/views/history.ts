@@ -6,11 +6,12 @@ import { api, EventEnvelope } from '../api';
 import { h } from '../dom';
 import { ts } from '../fmt';
 import { store } from '../store';
+import { helpButton } from '../ui/help';
 
 export function renderHistory(root: HTMLElement, entityId?: string): void {
   const title = entityId
-    ? h('h2', null, 'History of ', h('b', null, store.name(entityId)), ' ', h('span', { class: 'muted tiny' }, entityId))
-    : h('h2', null, 'Recent activity');
+    ? h('h2', null, 'History of ', h('b', null, store.name(entityId)), ' ', h('span', { class: 'muted tiny' }, entityId), helpButton('history'))
+    : h('h2', null, 'Recent activity', helpButton('history'));
   root.replaceChildren(h('div', { class: 'toolbar' }, title,
     h('span', { class: 'spacer' }),
     entityId ? h('a', { class: 'btn btn-ghost', href: '#/history' }, 'workspace-wide') : null),

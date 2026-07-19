@@ -7,6 +7,8 @@ import { chip, field, h, select } from '../dom';
 import { closeModal, openModal } from '../modal';
 import { store } from '../store';
 import { showError, toast } from '../toast';
+import { fieldsEditor } from '../ui/fieldsEditor';
+import { helpButton } from '../ui/help';
 
 const SEMANTICS: Semantic[] = ['pending', 'active', 'paused', 'satisfied', 'abandoned'];
 
@@ -21,9 +23,9 @@ function occupiedCount(stateId: string): number {
 
 function statesCol(): HTMLElement {
   return h('section', { class: 'vocab-col' },
-    h('h2', null, 'States'),
+    h('h2', null, 'States', helpButton('vocab')),
     h('p', { class: 'muted tiny' },
-      'Named states bind to one engine semantic. The semantic is locked while any thing is in the state; name, color and description change freely.'),
+      'Your names for situations, each bound to one of five behaviors the engine acts on. The behavior is locked while any thing is in the state; name and color change freely.'),
     h('ul', { class: 'vocab-list' }, ...store.states.map((s) => {
       const occ = occupiedCount(s.id);
       return h('li', null,
@@ -47,7 +49,7 @@ function stateEditor(existing?: StateDef): void {
   const body = h('div', null,
     field('Name', nameIn),
     field('Semantic', semSel, occ > 0
-      ? `locked: ${occ} thing(s) are in this state — rebinding would break the active⇔allocations invariant`
+      ? `locked: ${occ} thing(s) are in this state — move them out before changing what the state means`
       : 'what the engine does with things in this state'),
     field('Color', colorIn),
     field('Description', descIn),
@@ -69,12 +71,12 @@ function stateEditor(existing?: StateDef): void {
           } catch (e) { showError(e); } // semantic_immutable gets its friendly text
         },
       }, existing ? 'Save' : 'Define')));
-  openModal(existing ? `Edit state ${existing.name}` : 'New state', body);
+  openModal(existing ? `Edit state ${existing.name}` : 'New state', body, { help: 'stateEditor' });
 }
 
 function typesCol(): HTMLElement {
   return h('section', { class: 'vocab-col' },
-    h('h2', null, 'Thing types'),
+    h('h2', null, 'Thing types', helpButton('vocab')),
     h('p', { class: 'muted tiny' }, 'Types carry no engine meaning — they drive filtering, coloring and reporting.'),
     h('ul', { class: 'vocab-list' }, ...store.types.map((t) => h('li', null,
       chip(t.name, t.color, 'chip-type'),
@@ -91,14 +93,22 @@ export function openTypeEditor(existing?: TypeDef, onSaved?: () => void): void {
   const nameIn = h('input', { type: 'text', value: existing?.name ?? '' });
   const colorIn = h('input', { type: 'color', value: existing?.color || '#6b7280' });
   const descIn = h('input', { type: 'text', value: existing?.description ?? '' });
+  const fe = fieldsEditor(existing?.fields ?? []);
   const body = h('div', null,
     field('Name', nameIn), field('Color', colorIn), field('Description', descIn),
+    fe.el,
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
       h('button', {
         class: 'btn btn-primary',
         onclick: async () => {
-          const data = { name: nameIn.value.trim(), color: colorIn.value, description: descIn.value.trim() || undefined };
+          const fr = fe.read();
+          if (fr.error) { toast(fr.error, 'error', 7000); return; }
+          const data = {
+            name: nameIn.value.trim(), color: colorIn.value,
+            description: descIn.value.trim() || undefined,
+            ...(fr.fields ? { fields: fr.fields } : {}),
+          };
           if (!data.name) { toast('Name is required.', 'error'); return; }
           try {
             if (existing) await api.updateType(existing.id, data, existing.version);
@@ -109,12 +119,12 @@ export function openTypeEditor(existing?: TypeDef, onSaved?: () => void): void {
           } catch (e) { showError(e); }
         },
       }, existing ? 'Save' : 'Define')));
-  openModal(existing ? `Edit type ${existing.name}` : 'New type', body);
+  openModal(existing ? `Edit type ${existing.name}` : 'New type', body, { wide: true, help: 'typeEditor' });
 }
 
 function resourceTypesCol(): HTMLElement {
   return h('section', { class: 'vocab-col' },
-    h('h2', null, 'Resource types'),
+    h('h2', null, 'Resource types', helpButton('vocab')),
     h('p', { class: 'muted tiny' },
       'Categorize resources (person, room, tool…) — display and filtering only; the engine matches on capabilities, never on type.'),
     h('ul', { class: 'vocab-list' }, ...store.resourceTypes.map((t) => h('li', null,
@@ -132,14 +142,22 @@ export function openResourceTypeEditor(existing?: ResourceType, onSaved?: (rt: R
   const nameIn = h('input', { type: 'text', value: existing?.name ?? '' });
   const colorIn = h('input', { type: 'color', value: existing?.color || '#6b7280' });
   const descIn = h('input', { type: 'text', value: existing?.description ?? '' });
+  const fe = fieldsEditor(existing?.fields ?? []);
   const body = h('div', null,
     field('Name', nameIn), field('Color', colorIn), field('Description', descIn),
+    fe.el,
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
       h('button', {
         class: 'btn btn-primary',
         onclick: async () => {
-          const data = { name: nameIn.value.trim(), color: colorIn.value, description: descIn.value.trim() || undefined };
+          const fr = fe.read();
+          if (fr.error) { toast(fr.error, 'error', 7000); return; }
+          const data = {
+            name: nameIn.value.trim(), color: colorIn.value,
+            description: descIn.value.trim() || undefined,
+            ...(fr.fields ? { fields: fr.fields } : {}),
+          };
           if (!data.name) { toast('Name is required.', 'error'); return; }
           try {
             let rt: ResourceType;
@@ -151,13 +169,13 @@ export function openResourceTypeEditor(existing?: ResourceType, onSaved?: (rt: R
           } catch (e) { showError(e); }
         },
       }, existing ? 'Save' : 'Define')));
-  openModal(existing ? `Edit resource type ${existing.name}` : 'New resource type', body);
+  openModal(existing ? `Edit resource type ${existing.name}` : 'New resource type', body, { wide: true, help: 'typeEditor' });
   nameIn.focus();
 }
 
 function capsCol(): HTMLElement {
   return h('section', { class: 'vocab-col' },
-    h('h2', null, 'Capabilities'),
+    h('h2', null, 'Capabilities', helpButton('vocab')),
     h('p', { class: 'muted tiny' },
       'Declared tags matched between requirements and resources — declared-before-use, so a typo can never silently break matching.'),
     h('ul', { class: 'vocab-list' }, ...store.capabilities.map((c) => h('li', null,
@@ -194,7 +212,7 @@ export function openCapabilityEditor(existing?: CapabilityDef, onSaved?: (c: Cap
           } catch (e) { showError(e); }
         },
       }, existing ? 'Save' : 'Define')));
-  openModal(existing ? `Edit capability ${existing.name}` : 'New capability', body);
+  openModal(existing ? `Edit capability ${existing.name}` : 'New capability', body, { help: 'capabilityEditor' });
   nameIn.focus();
 }
 

@@ -534,7 +534,7 @@ func checkParent(sim *Projection, child, childProject, parent string) error {
 	if len(pt.Children) == 0 {
 		if sem := sim.SemanticOf(pt); sem != event.SemanticPending {
 			return errf(KindContainment, []string{parent},
-				"parent %s is a %s-semantic leaf: parenting requires a pending leaf (convert it first, §2.1)",
+				"parent %s is a %s-semantic leaf: only a not-yet-started leaf can take children — move its work onto a child step first",
 				parent, sem)
 		}
 		var reqs []string
@@ -546,7 +546,7 @@ func checkParent(sim *Projection, child, childProject, parent string) error {
 		if len(reqs) > 0 {
 			sort.Strings(reqs)
 			return errf(KindContainment, append([]string{parent}, reqs...),
-				"parent %s carries requirements: parenting requires a requirement-free leaf (move them to a child step, §2.1)",
+				"parent %s carries requirements: move them onto a child step before adding children",
 				parent)
 		}
 	}

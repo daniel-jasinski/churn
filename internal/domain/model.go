@@ -14,19 +14,39 @@ type State struct {
 	Description string
 }
 
-// ThingType is a user-defined thing type (§5.3).
+// MetadataField is one declared metadata field shape on a thing type or
+// resource type (§5.3): a UI affordance that drives editing forms. The fold
+// stores it verbatim (Kind normalized to its default); nothing in the engine
+// ever reads instance metadata against it — the log stays permissive, and
+// Required is a form hint, not schema enforcement.
+type MetadataField struct {
+	Key   string
+	Label string
+	// Kind is always normalized ("text", "number", "date" or "select"; the
+	// fold applies the default).
+	Kind string
+	// Options are the select choices; empty unless Kind is "select".
+	Options  []string
+	Required bool
+}
+
+// ThingType is a user-defined thing type (§5.3). Fields are its declared
+// metadata field shapes.
 type ThingType struct {
 	Name        string
 	Color       string
 	Description string
+	Fields      []MetadataField
 }
 
 // ResourceType is a user-defined resource type (§5.3) — pure categorization
-// for boards and reports; the engine attaches no meaning to it.
+// for boards and reports; the engine attaches no meaning to it. Fields are
+// its declared metadata field shapes.
 type ResourceType struct {
 	Name        string
 	Color       string
 	Description string
+	Fields      []MetadataField
 }
 
 // Capability is a user-defined capability tag (§5.3).
@@ -240,6 +260,30 @@ func cloneSet(s map[string]struct{}) map[string]struct{} {
 		c[k] = struct{}{}
 	}
 	return c
+}
+
+func cloneFields(fs []MetadataField) []MetadataField {
+	if fs == nil {
+		return nil
+	}
+	c := make([]MetadataField, len(fs))
+	for i, f := range fs {
+		c[i] = f
+		c[i].Options = append([]string(nil), f.Options...)
+	}
+	return c
+}
+
+func (t *ThingType) clone() *ThingType {
+	c := *t
+	c.Fields = cloneFields(t.Fields)
+	return &c
+}
+
+func (r *ResourceType) clone() *ResourceType {
+	c := *r
+	c.Fields = cloneFields(r.Fields)
+	return &c
 }
 
 func (t *Thing) clone() *Thing {

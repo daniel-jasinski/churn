@@ -3,6 +3,7 @@ package server
 import (
 	"math"
 	"net/http"
+	"strconv"
 
 	"churn/internal/analytics"
 	"churn/internal/domain"
@@ -42,9 +43,36 @@ type readyEntryDTO struct {
 	Score        recommendationDTO `json:"score"`
 }
 
+type nearBlockerDTO struct {
+	Thing string `json:"thing"`
+	// Status is the blocker's own derived status ("waiting on X (working)");
+	// a declared composite blocker carries its §2.1 rollup status.
+	Status string `json:"status"`
+}
+
+type nearReadyEntryDTO struct {
+	Thing   string `json:"thing"`
+	Project string `json:"project"`
+	Type    string `json:"type"`
+	// Frontier is the §3.2 minimal frontier of declared blockers, sorted by
+	// blocker id; Count is its size.
+	Frontier []nearBlockerDTO `json:"frontier"`
+	Count    int              `json:"count"`
+}
+
+// maxNearBlockers caps the ?near override — a "near ready" list with a huge
+// frontier cutoff is just the blocked list.
+const maxNearBlockers = 5
+
 // getReady implements GET /api/v1/analytics/ready with the §3.1 filters as
-// query params: project, type, subtree, capability. Sorted like Recommend:
-// score descending, then thing id.
+// query params: project, type, subtree, capability (all applied to both
+// lists; capability filters by the thing's own requirements). The response
+// is an object: "ready" is the §3.1 ready list sorted like Recommend (score
+// descending, then thing id); "near_ready" is the almost-ready companion —
+// blocked leaves at most N blockers away (their transitively-reduced §3.2
+// frontier, each blocker with its own derived status), sorted by frontier
+// size then thing id. N defaults to 2; ?near=N overrides it (an integer
+// >= 1, capped at 5; anything else is a 400).
 func (s *Server) getReady(rw http.ResponseWriter, r *http.Request) {
 	settings, e := s.settings.load()
 	if e != nil {
@@ -52,21 +80,47 @@ func (s *Server) getReady(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	entries := analytics.Ready(s.w.Projection(), settings, analytics.ReadyFilter{
+	near := analytics.DefaultNearReadyMax
+	if raw := q.Get("near"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			writeError(rw, errBadRequest("near %q: want an integer >= 1", raw))
+			return
+		}
+		near = min(n, maxNearBlockers)
+	}
+	filter := analytics.ReadyFilter{
 		Project:    q.Get("project"),
 		Type:       q.Get("type"),
 		Subtree:    q.Get("subtree"),
 		Capability: q.Get("capability"),
-	})
-	out := make([]readyEntryDTO, 0, len(entries))
+	}
+	p := s.w.Projection()
+	entries := analytics.Ready(p, settings, filter)
+	ready := make([]readyEntryDTO, 0, len(entries))
 	for _, en := range entries {
-		out = append(out, readyEntryDTO{
+		ready = append(ready, readyEntryDTO{
 			Thing: en.Thing, Project: en.Project, Type: en.Type,
 			Requirements: buildMatchReqDTOs(en.Requirements),
 			Score:        buildRecommendationDTO(en.Score),
 		})
 	}
-	writeJSON(rw, http.StatusOK, out)
+	nears := analytics.NearReady(p, filter, near)
+	nearOut := make([]nearReadyEntryDTO, 0, len(nears))
+	for _, en := range nears {
+		frontier := make([]nearBlockerDTO, len(en.Frontier))
+		for i, b := range en.Frontier {
+			frontier[i] = nearBlockerDTO{Thing: b.Thing, Status: string(b.Status)}
+		}
+		nearOut = append(nearOut, nearReadyEntryDTO{
+			Thing: en.Thing, Project: en.Project, Type: en.Type,
+			Frontier: frontier, Count: en.Count,
+		})
+	}
+	writeJSON(rw, http.StatusOK, struct {
+		Ready     []readyEntryDTO     `json:"ready"`
+		NearReady []nearReadyEntryDTO `json:"near_ready"`
+	}{ready, nearOut})
 }
 
 // getRecommendations implements GET /api/v1/analytics/recommendations: the

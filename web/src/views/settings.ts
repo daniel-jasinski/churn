@@ -5,6 +5,7 @@ import { api, Weights } from '../api';
 import { field, h } from '../dom';
 import { store } from '../store';
 import { showError, toast } from '../toast';
+import { helpButton } from '../ui/help';
 
 const LABELS: [keyof Weights, string, string][] = [
   ['immediate_unlock', 'w1 · immediate unlock', 'dependents made ready if this finishes'],
@@ -28,7 +29,7 @@ export function renderSettings(root: HTMLElement): void {
   });
 
   root.replaceChildren(h('div', { class: 'settings' },
-    h('h2', null, 'Recommendation weights'),
+    h('h2', null, 'Recommendation weights', helpButton('weights')),
     h('pre', { class: 'formula' },
       'score = w1·immediate_unlock\n' +
       '      + w2·downstream_reach\n' +
@@ -36,7 +37,7 @@ export function renderSettings(root: HTMLElement): void {
       '      + w4·waiting_age\n' +
       '      − w5·resource_scarcity_penalty'),
     h('p', { class: 'muted' },
-      'Live workspace settings, not facts: the log records decisions taken, never the advice (§3.4). ',
+      'Live workspace settings, not facts: the log records decisions taken, never the advice. ',
       'Every ready-board score explains its own terms.'),
     ...rows,
     h('div', { class: 'modal-actions' },

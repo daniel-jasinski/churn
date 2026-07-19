@@ -108,8 +108,8 @@ func NewProjection() *Projection {
 func (p *Projection) Clone() *Projection {
 	c := *p
 	c.States = cloneMap(p.States, clonePtr)
-	c.Types = cloneMap(p.Types, clonePtr)
-	c.ResourceTypes = cloneMap(p.ResourceTypes, clonePtr)
+	c.Types = cloneMap(p.Types, (*ThingType).clone)
+	c.ResourceTypes = cloneMap(p.ResourceTypes, (*ResourceType).clone)
 	c.Capabilities = cloneMap(p.Capabilities, clonePtr)
 	c.Projects = cloneMap(p.Projects, clonePtr)
 	c.Things = cloneMap(p.Things, (*Thing).clone)
@@ -227,12 +227,14 @@ func (p *Projection) fold(ev event.Envelope, payload event.Payload) error {
 		if err := p.mustNotExist(id); err != nil {
 			return err
 		}
-		p.Types[id] = &ThingType{Name: pl.Name, Color: pl.Color, Description: pl.Description}
+		p.Types[id] = &ThingType{Name: pl.Name, Color: pl.Color, Description: pl.Description,
+			Fields: foldFields(pl.Fields)}
 	case *event.TypeSuperseded:
 		if _, ok := p.Types[id]; !ok {
 			return fmt.Errorf("type %s does not exist", id)
 		}
-		p.Types[id] = &ThingType{Name: pl.Name, Color: pl.Color, Description: pl.Description}
+		p.Types[id] = &ThingType{Name: pl.Name, Color: pl.Color, Description: pl.Description,
+			Fields: foldFields(pl.Fields)}
 	case *event.TypeRetracted:
 		if _, ok := p.Types[id]; !ok {
 			return fmt.Errorf("type %s does not exist", id)
@@ -363,12 +365,14 @@ func (p *Projection) fold(ev event.Envelope, payload event.Payload) error {
 		if err := p.mustNotExist(id); err != nil {
 			return err
 		}
-		p.ResourceTypes[id] = &ResourceType{Name: pl.Name, Color: pl.Color, Description: pl.Description}
+		p.ResourceTypes[id] = &ResourceType{Name: pl.Name, Color: pl.Color, Description: pl.Description,
+			Fields: foldFields(pl.Fields)}
 	case *event.ResourceTypeSuperseded:
 		if _, ok := p.ResourceTypes[id]; !ok {
 			return fmt.Errorf("resource type %s does not exist", id)
 		}
-		p.ResourceTypes[id] = &ResourceType{Name: pl.Name, Color: pl.Color, Description: pl.Description}
+		p.ResourceTypes[id] = &ResourceType{Name: pl.Name, Color: pl.Color, Description: pl.Description,
+			Fields: foldFields(pl.Fields)}
 	case *event.ResourceTypeRetracted:
 		if _, ok := p.ResourceTypes[id]; !ok {
 			return fmt.Errorf("resource type %s does not exist", id)
@@ -482,6 +486,28 @@ func (p *Projection) mustNotExist(id string) error {
 		return fmt.Errorf("entity id %s already exists: ids are never reused", id)
 	}
 	return nil
+}
+
+// foldFields renders a payload's declared metadata fields into the model:
+// deep-copied (payload slices never alias the projection) and with Kind
+// normalized to its default, like a dependency's OnAbandoned.
+func foldFields(fs []event.MetadataField) []MetadataField {
+	if len(fs) == 0 {
+		return nil
+	}
+	out := make([]MetadataField, len(fs))
+	for i, f := range fs {
+		kind := f.Kind
+		if kind == "" {
+			kind = event.FieldKindText
+		}
+		out[i] = MetadataField{
+			Key: f.Key, Label: f.Label, Kind: kind,
+			Options:  append([]string(nil), f.Options...),
+			Required: f.Required,
+		}
+	}
+	return out
 }
 
 func sortedCopy(ss []string) []string {

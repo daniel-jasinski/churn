@@ -109,20 +109,45 @@ type stateDTO struct {
 	Version     int64  `json:"version"`
 }
 
+// metadataFieldDTO is one declared metadata field shape (§5.3) — a form
+// affordance, never enforced against instance metadata. Kind is always the
+// normalized value ("text", "number", "date", "select").
+type metadataFieldDTO struct {
+	Key      string   `json:"key"`
+	Label    string   `json:"label,omitempty"`
+	Kind     string   `json:"kind"`
+	Options  []string `json:"options,omitempty"`
+	Required bool     `json:"required,omitempty"`
+}
+
+func buildMetadataFieldDTOs(fs []domain.MetadataField) []metadataFieldDTO {
+	if len(fs) == 0 {
+		return nil
+	}
+	out := make([]metadataFieldDTO, len(fs))
+	for i, f := range fs {
+		out[i] = metadataFieldDTO{Key: f.Key, Label: f.Label, Kind: f.Kind,
+			Options: append([]string(nil), f.Options...), Required: f.Required}
+	}
+	return out
+}
+
 type typeDTO struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Color       string `json:"color,omitempty"`
-	Description string `json:"description,omitempty"`
-	Version     int64  `json:"version"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	Color       string             `json:"color,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Fields      []metadataFieldDTO `json:"fields,omitempty"`
+	Version     int64              `json:"version"`
 }
 
 type resourceTypeDTO struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Color       string `json:"color,omitempty"`
-	Description string `json:"description,omitempty"`
-	Version     int64  `json:"version"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	Color       string             `json:"color,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Fields      []metadataFieldDTO `json:"fields,omitempty"`
+	Version     int64              `json:"version"`
 }
 
 type capabilityDTO struct {
@@ -252,13 +277,15 @@ func buildStateDTO(p *domain.Projection, id string) stateDTO {
 func buildTypeDTO(p *domain.Projection, id string) typeDTO {
 	ty := p.Types[id]
 	return typeDTO{ID: id, Name: ty.Name, Color: ty.Color,
-		Description: ty.Description, Version: p.Version(id)}
+		Description: ty.Description, Fields: buildMetadataFieldDTOs(ty.Fields),
+		Version: p.Version(id)}
 }
 
 func buildResourceTypeDTO(p *domain.Projection, id string) resourceTypeDTO {
 	rt := p.ResourceTypes[id]
 	return resourceTypeDTO{ID: id, Name: rt.Name, Color: rt.Color,
-		Description: rt.Description, Version: p.Version(id)}
+		Description: rt.Description, Fields: buildMetadataFieldDTOs(rt.Fields),
+		Version: p.Version(id)}
 }
 
 func buildCapabilityDTO(p *domain.Projection, id string) capabilityDTO {

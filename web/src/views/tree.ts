@@ -9,12 +9,13 @@ import { showError } from '../toast';
 import { asOfButton } from '../ui/asof';
 import { badgeRow, typeChip } from '../ui/bits';
 import { openBulkAdd } from '../ui/bulkAdd';
+import { helpButton } from '../ui/help';
 import { projectSelect } from '../ui/projectSelect';
 import { openThingEditor } from '../ui/thingEditor';
 
 export function renderTree(root: HTMLElement): void {
   const toolbar = h('div', { class: 'toolbar' },
-    h('h2', null, 'Hierarchy & progress'),
+    h('h2', null, 'Hierarchy & progress'), helpButton('tree'),
     projectSelect({ allowAll: true, onPick: () => renderTree(root) }),
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn mut', onclick: () => openBulkAdd(store.selectedProject || undefined) }, 'Bulk add'),

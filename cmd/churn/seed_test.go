@@ -91,6 +91,37 @@ func TestSeedDemo(t *testing.T) {
 		t.Errorf("ready = %d %v, want 9", got, names)
 	}
 
+	// Near-ready: the almost-ready companion of the ready list is populated.
+	// Four blocked leaves are one blocker away — the print run (behind the
+	// abandoned vendor comparison, policy block), the findings (behind the
+	// running analysis), and the blog post and archive (behind the findings)
+	// — while the final content review (four blockers) stays beyond the
+	// default cutoff.
+	nearEntries := analytics.NearReady(p, analytics.ReadyFilter{}, 0)
+	nearByName := map[string]analytics.NearReadyEntry{}
+	for _, en := range nearEntries {
+		nearByName[p.Things[en.Thing].Name] = en
+	}
+	if len(nearEntries) != 4 {
+		names := make([]string, 0, len(nearByName))
+		for n := range nearByName {
+			names = append(names, n)
+		}
+		t.Errorf("near-ready = %d %v, want 4", len(nearEntries), names)
+	}
+	vendor := thingByName(t, p, "Print vendor comparison")
+	if en, ok := nearByName["Order print run"]; !ok || en.Count != 1 ||
+		en.Frontier[0].Thing != vendor || en.Frontier[0].Status != domain.StatusDropped {
+		t.Errorf("print run near-ready = %+v, want frontier [vendor dropped]", en)
+	}
+	if en, ok := nearByName["Publish pilot findings"]; !ok || en.Count != 1 ||
+		en.Frontier[0].Status != domain.StatusWorking {
+		t.Errorf("findings near-ready = %+v, want frontier [analyze working]", en)
+	}
+	if _, ok := nearByName["Final content review"]; ok {
+		t.Error("final review (4 blockers) must be beyond the default near-ready cutoff")
+	}
+
 	// Contention: the §3.3 flashing light — six ready things wanting the
 	// review signature against marginal capacity two — plus nonzero total.
 	rep := analytics.Contention(p)

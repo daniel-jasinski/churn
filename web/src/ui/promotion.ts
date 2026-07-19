@@ -14,10 +14,14 @@ import { closeModal, openModal } from '../modal';
 import { store } from '../store';
 import { showError, toast } from '../toast';
 
-/** isPromotionRejection detects the §2.1 parenting rejection for `parent`. */
+/** isPromotionRejection detects the parenting-under-a-worked-leaf rejection
+ * for `parent`: the structured kind is "containment" (which also covers
+ * cross-project parenting and containment cycles), so the promotion case is
+ * narrowed by the parent id being the offender and the message pointing at
+ * the child-step conversion. */
 export function isPromotionRejection(e: unknown, parentId: string): e is ApiError {
   return e instanceof ApiError && e.kind === 'containment'
-    && e.ids.includes(parentId) && e.message.includes('§2.1');
+    && e.ids.includes(parentId) && e.message.includes('child step');
 }
 
 /** offerPromotion shows the conversion dialog; on confirm it converts and
@@ -26,7 +30,7 @@ export function offerPromotion(parent: Thing, retry: () => Promise<void>): void 
   const reqs = store.requirementsOf(parent.id);
   const sem = store.semanticOf(parent);
   if (sem === 'active') {
-    toast(`${parent.name} is being worked — pause it before converting it to a composite (§2.1).`, 'error', 8000);
+    toast(`${parent.name} is being worked — pause it before converting it to a container of child steps.`, 'error', 8000);
     return;
   }
   const stateName = parent.state ? store.state(parent.state)?.name ?? parent.state : null;
@@ -39,8 +43,8 @@ export function offerPromotion(parent: Thing, retry: () => Promise<void>): void 
       reqs.length ? ` and ${reqs.length} requirement(s)` : '',
       ' onto a new child step named ', h('b', null, workName), '?'),
     h('p', { class: 'muted' },
-      'The leaf’s history stays attached to it; the child step takes over the hands-on work. ',
-      'This is the same pattern as the “final review child step” (§2.1).'),
+      'Its history stays attached to it; the child step takes over the hands-on work. ',
+      'This is the same pattern as adding a “final review” child step to a workstream.'),
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
       h('button', {
@@ -58,7 +62,7 @@ export function offerPromotion(parent: Thing, retry: () => Promise<void>): void 
           }
         },
       }, `Create ${workName}`)));
-  openModal('Convert to composite', body);
+  openModal('Convert to container', body, { help: 'convert' });
 }
 
 async function convert(parent: Thing, workName: string): Promise<void> {

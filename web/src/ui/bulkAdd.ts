@@ -180,5 +180,5 @@ export function openBulkAdd(presetProject?: string): void {
       h('button', { class: 'btn', onclick: () => void preview() }, 'Preview'),
       h('button', { class: 'btn btn-primary', onclick: () => void commit() }, 'Commit batch')));
 
-  openModal('Bulk add things', body, { wide: true });
+  openModal('Bulk add things', body, { wide: true, help: 'bulkAdd' });
 }

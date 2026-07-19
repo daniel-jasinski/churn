@@ -589,8 +589,8 @@ writer.started                                new writer lineage (origin) after 
 
                        ── vocabulary (§5.3) ──
 state.defined / .superseded / .retracted      name, semantic, color, description
-type.defined / .superseded / .retracted       name, color, description
-resourcetype.defined / .superseded / .retracted   name, color, description
+type.defined / .superseded / .retracted       name, color, description, metadata field shapes (§5.3)
+resourcetype.defined / .superseded / .retracted   name, color, description, metadata field shapes (§5.3)
 capability.defined / .superseded / .retracted name, description
 
                        ── domain ──
@@ -705,7 +705,15 @@ Rules that keep vocabulary and data consistent **by construction**:
   schema-free zone nothing computes off; declaring them would be ceremony
   with no consistency payoff. If a metadata key ever earns computed meaning,
   that is the signal it should graduate into the vocabulary as a declared
-  concept — via ordinary events, no migration.
+  concept — via ordinary events, no migration. One UI affordance sits on
+  top without changing this: a thing type or resource type may **declare
+  metadata field shapes** (key, label, kind — text/number/date/select —
+  options, a required hint) so editor forms can offer proper inputs instead
+  of raw JSON. The declarations live on the type entities and supersede like
+  any attribute; the engine still computes nothing off metadata, and
+  instance metadata is **never validated against them** — the log stays
+  permissive, "required" is a form hint, and a non-conforming document is a
+  fact like any other. Declaration is UI affordance, not schema enforcement.
 
 Consistency between ontology and data is therefore **structural, not
 reconciled**: one log, one writer, one fold. Vocabulary events and domain

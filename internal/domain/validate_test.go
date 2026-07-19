@@ -911,3 +911,32 @@ func TestResourceTypeAttachesNoMeaning(t *testing.T) {
 	typed.must(activate...)
 	untyped.must(activate...)
 }
+
+// TestDeclaredMetadataFieldsAreNotEnforced pins the §5.3 boundary: metadata
+// field declarations on a type drive editing forms ONLY. A thing whose
+// instance metadata violates every declared shape — wrong kind, value
+// outside the select options, a missing required key, an undeclared key —
+// still validates, folds, and derives exactly like a conforming one. The
+// log stays permissive; "required" is a form hint, not schema enforcement.
+func TestDeclaredMetadataFieldsAreNotEnforced(t *testing.T) {
+	b := newWS(t)
+	b.must(cmd3{event.TypeTypeSuperseded, "ty_task", `{"name":"task","fields":[` +
+		`{"key":"count","kind":"number","required":true},` +
+		`{"key":"mode","kind":"select","options":["a","b"]}]}`})
+
+	// count missing (required), mode outside its options and of the wrong
+	// JSON kind, plus an undeclared stray key.
+	b.must(cmd3{event.TypeThingCreated, "th_1",
+		`{"name":"X","project":"pr_1","type":"ty_task","metadata":{"mode":42,"stray":true}}`})
+	if st := b.p.Derive("th_1").Status; st != StatusReady {
+		t.Fatalf("thing with non-conforming metadata derives %q, want ready", st)
+	}
+
+	// Supersession with equally non-conforming metadata is accepted too, and
+	// the metadata document is stored verbatim.
+	b.must(cmd3{event.TypeThingSuperseded, "th_1",
+		`{"name":"X","type":"ty_task","metadata":{"count":"not a number"}}`})
+	if got := b.p.Things["th_1"].Metadata; got != `{"count":"not a number"}` {
+		t.Fatalf("metadata = %q, want the document stored verbatim", got)
+	}
+}

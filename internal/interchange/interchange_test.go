@@ -156,7 +156,16 @@ func TestRoundTrip(t *testing.T) {
 	for _, batch := range [][]writer.Command{
 		{
 			{Type: event.TypeCapabilityDefined, V: 1, Entity: capZ, Payload: event.CapabilityDefined{Name: "alloc cap"}},
-			{Type: event.TypeTypeDefined, V: 1, Entity: tyZ, Payload: event.TypeDefined{Name: "alloc type"}},
+			// Fields-carrying type.defined: declared metadata field shapes
+			// (§5.3) must cross the export → import boundary intact.
+			{Type: event.TypeTypeDefined, V: 1, Entity: tyZ, Payload: event.TypeDefined{
+				Name: "alloc type",
+				Fields: []event.MetadataField{
+					{Key: "prio", Label: "Priority", Kind: event.FieldKindSelect,
+						Options: []string{"low", "high"}, Required: true},
+					{Key: "ref"},
+				},
+			}},
 			{Type: event.TypeResourceTypeDefined, V: 1, Entity: rtZ, Payload: event.ResourceTypeDefined{Name: "alloc rtype"}},
 			{Type: event.TypeProjectCreated, V: 1, Entity: prZ, Payload: event.ProjectCreated{Name: "alloc project"}},
 			{Type: event.TypeResourceCreated, V: 1, Entity: rsZ, Payload: event.ResourceCreated{Name: "alloc rs", Kind: event.KindReusable, Capacity: 1, Type: rtZ}},

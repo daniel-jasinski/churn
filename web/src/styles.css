@@ -341,3 +341,53 @@ input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 .draw-hint { color: var(--warn); font-weight: 600; font-size: 12px; }
 .cy-canvas.drawing { outline: 2px dashed var(--warn); cursor: crosshair; }
 .chip-new { border-style: dashed; color: var(--accent); }
+
+/* declared metadata fields & fields editor */
+.meta-declared { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+.meta-field { margin: 4px 0; }
+.meta-key { text-transform: none; letter-spacing: 0; }
+.meta-free { margin-top: 8px; }
+.fields-editor { margin: 10px 0; }
+.fields-rows { display: flex; flex-direction: column; gap: 3px; margin: 4px 0; }
+.field-row { display: flex; gap: 5px; align-items: center; }
+.field-move { display: inline-flex; }
+.field-move .btn { padding: 0 4px; }
+.in-fkey { width: 110px; }
+.in-flabel { flex: 1; min-width: 80px; }
+.in-fopts { flex: 1.2; min-width: 100px; }
+.field-req { display: inline-flex; align-items: center; gap: 2px; cursor: help; }
+
+/* almost-ready strip */
+.near-strip { margin-top: 12px; background: var(--bg3); border-radius: 10px; padding: 8px; }
+.near-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.card-near { border-left-color: var(--st-blocked); }
+.near-frontier { margin-top: 5px; display: flex; flex-direction: column; gap: 2px; }
+.near-blocker { display: inline-flex; align-items: center; gap: 4px; }
+.near-ctl select { font-size: 11px; padding: 1px 4px; }
+
+/* help system */
+.help-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; border-radius: 50%; margin-left: 6px; padding: 0;
+  font-size: 11px; font-weight: 700; cursor: pointer; vertical-align: middle;
+  border: 1px solid var(--border); background: var(--bg3); color: var(--muted);
+}
+.help-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.row-help { display: inline-flex; align-items: center; gap: 4px; }
+.help-body h4 { margin-top: 12px; }
+.help-purpose { margin: 4px 0 0; }
+.help-body ul { margin: 4px 0; padding-left: 20px; }
+.help-body li { margin: 3px 0; }
+.help-dl { margin: 4px 0; }
+.help-dl dt { font-weight: 600; margin-top: 7px; }
+.help-dl dd { margin: 1px 0 0 14px; color: var(--muted); }
+
+/* metadata misfit / collision / fields-editor errors */
+.meta-misfit { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kv-row { flex-direction: column; align-items: stretch; gap: 1px; }
+.kv-inputs { display: flex; gap: 6px; align-items: center; }
+.kv-inputs input { flex: 1; }
+.kv-err { color: var(--danger); }
+.kv-dup input:first-child { border-color: var(--danger); }
+.field-row-err input, .field-row-err select { border-color: var(--danger); }
+.field-row-errmsg { color: var(--danger); margin: 0 0 3px 34px; }

@@ -7,11 +7,12 @@ import { api, ApiError, Project } from '../api';
 import { h } from '../dom';
 import { store } from '../store';
 import { showError, toast } from '../toast';
+import { helpButton } from '../ui/help';
 import { openProjectEditor } from '../ui/projectEditor';
 
 export function renderProjects(root: HTMLElement): void {
   const toolbar = h('div', { class: 'toolbar' },
-    h('h2', null, 'Projects'),
+    h('h2', null, 'Projects'), helpButton('projects'),
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn btn-primary mut', onclick: () => openProjectEditor() }, '+ New project'));
 
@@ -45,7 +46,7 @@ export function renderProjects(root: HTMLElement): void {
         h('th', null, 'project'), h('th', null, 'things'), h('th', null, 'progress'), h('th', null, ''))),
       h('tbody', null, ...rows)),
     h('p', { class: 'muted tiny' },
-      'Retraction is refused while things still reference a project (§5.2) — retract or move the things first.'));
+      'Retraction is refused while things still live in a project — retract or move the things first.'));
 }
 
 async function retractProject(p: Project): Promise<void> {

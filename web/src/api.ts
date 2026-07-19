@@ -93,11 +93,23 @@ export interface StateDef {
   version: number;
 }
 
+/** MetadataField is one declared metadata field shape on a thing type or
+ * resource type (§5.3) — a form affordance, never engine-enforced. Kind in
+ * DTOs is always normalized. */
+export interface MetadataField {
+  key: string;
+  label?: string;
+  kind: 'text' | 'number' | 'date' | 'select';
+  options?: string[];
+  required?: boolean;
+}
+
 export interface TypeDef {
   id: string;
   name: string;
   color?: string;
   description?: string;
+  fields?: MetadataField[];
   version: number;
 }
 
@@ -113,6 +125,7 @@ export interface ResourceType {
   name: string;
   color?: string;
   description?: string;
+  fields?: MetadataField[];
   version: number;
 }
 
@@ -167,6 +180,27 @@ export interface ReadyEntry {
   type: string;
   requirements: MatchReq[];
   score: Recommendation;
+}
+
+export interface NearBlocker {
+  thing: string;
+  status: Status;
+}
+
+/** NearReadyEntry: a pending leaf whose §3.2 minimal frontier has at most N
+ * declared blockers ("almost ready"). Composite blockers carry their §2.1
+ * rollup status. */
+export interface NearReadyEntry {
+  thing: string;
+  project: string;
+  type: string;
+  frontier: NearBlocker[];
+  count: number;
+}
+
+export interface ReadyResponse {
+  ready: ReadyEntry[];
+  near_ready: NearReadyEntry[];
 }
 
 export interface Weights {
@@ -471,11 +505,11 @@ export const api = {
   resourceTypes: () => get<ResourceType[]>('/vocab/resource-types'),
   graph: (project: string, asOf?: string) =>
     get<Graph>(`/projects/${project}/graph` + (asOf ? `?as_of=${encodeURIComponent(asOf)}` : '')),
-  ready: (f: { project?: string; type?: string; subtree?: string; capability?: string } = {}) => {
+  ready: (f: { project?: string; type?: string; subtree?: string; capability?: string; near?: number } = {}) => {
     const q = new URLSearchParams();
-    for (const [k, v] of Object.entries(f)) if (v) q.set(k, v);
+    for (const [k, v] of Object.entries(f)) if (v) q.set(k, String(v));
     const qs = q.toString();
-    return get<ReadyEntry[]>('/analytics/ready' + (qs ? '?' + qs : ''));
+    return get<ReadyResponse>('/analytics/ready' + (qs ? '?' + qs : ''));
   },
   bottlenecks: () => get<Bottlenecks>('/analytics/bottlenecks'),
   recommendations: () => get<RecommendationsResponse>('/analytics/recommendations'),
@@ -527,9 +561,9 @@ export const api = {
   updateState: (id: string, data: { name: string; semantic: Semantic; color?: string; description?: string }, version?: number) =>
     req<StateDef>('PATCH', `/vocab/states/${id}`, data, ifMatch(version)),
   deleteState: (id: string) => req<unknown>('DELETE', `/vocab/states/${id}`),
-  createType: (data: { name: string; color?: string; description?: string }) =>
+  createType: (data: { name: string; color?: string; description?: string; fields?: MetadataField[] }) =>
     req<TypeDef>('POST', '/vocab/types', data),
-  updateType: (id: string, data: { name: string; color?: string; description?: string }, version?: number) =>
+  updateType: (id: string, data: { name: string; color?: string; description?: string; fields?: MetadataField[] }, version?: number) =>
     req<TypeDef>('PATCH', `/vocab/types/${id}`, data, ifMatch(version)),
   deleteType: (id: string) => req<unknown>('DELETE', `/vocab/types/${id}`),
   createCapability: (data: { name: string; description?: string }) =>
@@ -537,9 +571,9 @@ export const api = {
   updateCapability: (id: string, data: { name: string; description?: string }, version?: number) =>
     req<CapabilityDef>('PATCH', `/vocab/capabilities/${id}`, data, ifMatch(version)),
   deleteCapability: (id: string) => req<unknown>('DELETE', `/vocab/capabilities/${id}`),
-  createResourceType: (data: { name: string; color?: string; description?: string }) =>
+  createResourceType: (data: { name: string; color?: string; description?: string; fields?: MetadataField[] }) =>
     req<ResourceType>('POST', '/vocab/resource-types', data),
-  updateResourceType: (id: string, data: { name: string; color?: string; description?: string }, version?: number) =>
+  updateResourceType: (id: string, data: { name: string; color?: string; description?: string; fields?: MetadataField[] }, version?: number) =>
     req<ResourceType>('PATCH', `/vocab/resource-types/${id}`, data, ifMatch(version)),
   deleteResourceType: (id: string) => req<unknown>('DELETE', `/vocab/resource-types/${id}`),
 

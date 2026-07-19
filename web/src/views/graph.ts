@@ -12,6 +12,7 @@ import { store } from '../store';
 import { showError, toast } from '../toast';
 import { asOfButton } from '../ui/asof';
 import { badgeRow, reqChipsOf, stateChip, typeChip } from '../ui/bits';
+import { helpButton } from '../ui/help';
 import { openProjectEditor } from '../ui/projectEditor';
 import { projectSelect } from '../ui/projectSelect';
 import { openThingEditor } from '../ui/thingEditor';
@@ -91,7 +92,8 @@ export function renderGraph(root: HTMLElement, projectId?: string): void {
     h('span', { class: 'spacer' }),
     h('span', { class: 'legend' },
       ...Object.entries(statusColors).map(([s]) => h('span', { class: 'legend-item' }, statusDot(s), s))),
-    asOfButton());
+    asOfButton(),
+    helpButton('graph'));
 
   const canvas = h('div', { class: 'cy-canvas' + (vs.drawing ? ' drawing' : '') });
   const panel = h('aside', { class: 'side-panel' });
@@ -238,10 +240,18 @@ async function loadAndDraw(canvas: HTMLElement, panel: HTMLElement, projectId: s
   const lineColor = dark ? '#4b5563' : '#c3c9d4';
 
   if (cy) { cy.destroy(); cy = null; }
+  // wheelSensitivity 0.8 is deliberate (default ~0.1 is far too slow) —
+  // silence Cytoscape's advisory warning during init only.
+  cytoscape.warnings(false);
   cy = cytoscape({
     container: canvas,
     elements: { nodes, edges },
-    wheelSensitivity: 0.2,
+    // Wheel zoom: the ~0.1 default needs a dozen scrolls to change size
+    // meaningfully; 0.8 feels responsive without jumping (Cytoscape warns
+    // above 1). min/max clamp to a useful range for hundreds of nodes.
+    wheelSensitivity: 0.8,
+    minZoom: 0.1,
+    maxZoom: 4,
     style: [
       {
         selector: 'node',
@@ -306,6 +316,8 @@ async function loadAndDraw(canvas: HTMLElement, panel: HTMLElement, projectId: s
       { selector: ':selected', style: { 'overlay-color': '#3b82f6', 'overlay-opacity': 0.15, 'overlay-padding': 4 } },
     ],
   });
+
+  cytoscape.warnings(true); // restore after init — real warnings stay loud
 
   // debug hook (console poking; nothing in the app reads it)
   (window as unknown as Record<string, unknown>)['__cy'] = cy;
@@ -396,7 +408,7 @@ async function loadAndDraw(canvas: HTMLElement, panel: HTMLElement, projectId: s
     const depId = ev.target.data('depId');
     if (!depId) {
       panel.replaceChildren(h('div', { class: 'panel-pad muted' },
-        'An inherited edge (composite expansion, §2.1) — retract the declared edge it comes from.'));
+        'An implied edge: a dependency on a container binds everything inside it. Remove the declared edge it comes from.'));
       return;
     }
     vs.selected = { kind: 'dep', id: depId };
@@ -519,7 +531,7 @@ function renderThingPanel(panel: HTMLElement, t: Thing, g: Graph, root: HTMLElem
     h('button', { class: 'btn btn-sm', onclick: () => openThingEditor(t) }, 'Edit'),
     h('button', {
       class: 'btn btn-sm',
-      title: 'Add a child step (offers the §2.1 conversion when this is a worked leaf)',
+      title: 'Add a child step inside this (offers the conversion dialog when this already carries its own work)',
       onclick: () => openThingEditor(undefined, { project: t.project, parent: t.id }),
     }, '+ child'),
     h('button', {
@@ -638,5 +650,5 @@ function askOnAbandoned(from: string, to: string, root: HTMLElement): void {
           }
         },
       }, 'Assert dependency')));
-  openModal('New dependency', body);
+  openModal('New dependency', body, { help: 'thingEditor' });
 }

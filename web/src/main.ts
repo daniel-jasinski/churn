@@ -1,6 +1,7 @@
 // main.ts — boot: layout shell, routing, store wiring, keyboard shortcuts.
 
 import './styles.css';
+import './ui/help'; // registers the dialog help button before any modal opens
 import { h } from './dom';
 import { current, onRoute, navigate, Route } from './router';
 import { store } from './store';

@@ -10,6 +10,7 @@ declare module 'cytoscape' {
   interface CytoscapeStatic {
     (options?: Record<string, unknown>): Core;
     use(ext: unknown): void;
+    warnings(enabled: boolean): void;
   }
   const cytoscape: CytoscapeStatic;
   export default cytoscape;

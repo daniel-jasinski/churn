@@ -38,7 +38,7 @@ export function openProjectEditor(existing?: Project, onCreated?: (p: Project) =
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
       h('button', { class: 'btn btn-primary', onclick: () => void save() }, existing ? 'Rename' : 'Create')));
-  openModal(existing ? `Rename ${existing.name}` : 'New project', body);
+  openModal(existing ? `Rename ${existing.name}` : 'New project', body, { help: 'projectEditor' });
   nameIn.focus();
   nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') void save(); });
 }

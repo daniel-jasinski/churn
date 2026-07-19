@@ -98,3 +98,70 @@ func TestResourceTypeVocabCRUD(t *testing.T) {
 		t.Fatalf("batch-created resource type = %q, want %s", str(got, "type"), rtBatch)
 	}
 }
+
+// TestVocabMetadataFieldDeclarations drives declared metadata fields (§5.3)
+// on both vocab kinds that carry them: CRUD round-trip with kind
+// normalization, full-replacement supersession dropping them, 400 on shape
+// violations — and the permissive boundary: instance metadata is never
+// checked against the declarations.
+func TestVocabMetadataFieldDeclarations(t *testing.T) {
+	e := newEnv(t)
+	f := e.seed()
+
+	fields := []map[string]any{
+		{"key": "prio", "label": "Priority", "kind": "select", "options": []string{"low", "high"}, "required": true},
+		{"key": "ref"}, // kind defaults to text
+	}
+	ty := e.call("POST", "/api/v1/vocab/types", map[string]any{"name": "ticket", "fields": fields}, 201)
+	tyID := str(ty, "id")
+	got := ty["fields"].([]any)
+	if len(got) != 2 {
+		t.Fatalf("created type fields: %v", got)
+	}
+	first, second := got[0].(map[string]any), got[1].(map[string]any)
+	if str(first, "key") != "prio" || str(first, "kind") != "select" ||
+		first["required"] != true || len(first["options"].([]any)) != 2 {
+		t.Fatalf("fields[0]: %v", first)
+	}
+	if str(second, "key") != "ref" || str(second, "kind") != "text" {
+		t.Fatalf("fields[1]: %v, want kind normalized to text", second)
+	}
+
+	// Resource types accept the same declarations.
+	rt := e.call("POST", "/api/v1/vocab/resource-types",
+		map[string]any{"name": "machine", "fields": []map[string]any{{"key": "room", "kind": "date"}}}, 201)
+	if fl := rt["fields"].([]any); len(fl) != 1 || str(fl[0].(map[string]any), "kind") != "date" {
+		t.Fatalf("resource type fields: %v", rt)
+	}
+
+	// Shape violations are 400s: duplicate keys, bad kind, options without
+	// select, select without options.
+	for name, bad := range map[string]any{
+		"dup keys":            []map[string]any{{"key": "a"}, {"key": "a"}},
+		"bad kind":            []map[string]any{{"key": "a", "kind": "toggle"}},
+		"options sans select": []map[string]any{{"key": "a", "kind": "text", "options": []string{"x"}}},
+		"select sans options": []map[string]any{{"key": "a", "kind": "select"}},
+	} {
+		resp, b := e.do("POST", "/api/v1/vocab/types", map[string]any{"name": "bad", "fields": bad}, nil)
+		if resp.StatusCode != 400 {
+			t.Fatalf("%s: status %d %s, want 400", name, resp.StatusCode, b)
+		}
+	}
+
+	// Declarations drive forms only: a thing whose metadata ignores them —
+	// missing required prio, wrong-kind ref — is accepted (the log stays
+	// permissive, §5.3).
+	th := e.call("POST", "/api/v1/things", map[string]any{
+		"project": f.project, "name": "T", "type": tyID,
+		"metadata": map[string]any{"ref": 42, "stray": true},
+	}, 201)
+	if th["metadata"] == nil {
+		t.Fatalf("thing DTO: %v, want metadata echoed", th)
+	}
+
+	// Supersession is full replacement: PATCH without fields drops them.
+	up := e.call("PATCH", "/api/v1/vocab/types/"+tyID, map[string]any{"name": "ticket"}, 200)
+	if _, has := up["fields"]; has {
+		t.Fatalf("superseded type: %v, want fields dropped (full replacement)", up)
+	}
+}

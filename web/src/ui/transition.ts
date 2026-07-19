@@ -67,7 +67,7 @@ function pickState(semantic: Semantic, states: StateDef[]): Promise<StateDef | n
             resolve(s);
           },
         }, 'Choose')));
-    openModal('Choose state', body);
+    openModal('Choose state', body, { help: 'stateEditor' });
   });
 }
 
@@ -145,7 +145,7 @@ export function showProposalModal(t: Thing, state: StateDef, proposal: Proposal,
           }
         },
       }, 'Confirm assignment')));
-  openModal('Allocation proposal', body);
+  openModal('Allocation proposal', body, { help: 'proposal' });
 }
 
 /** repropose runs the §2.5 one-click atomic reconciliation. */

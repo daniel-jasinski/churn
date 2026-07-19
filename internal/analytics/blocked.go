@@ -40,7 +40,12 @@ func directBlockers(v *domain.DepView, leaf string) []string {
 // a composite is explained through its leaves, ignoring blockers inside its
 // own subtree: those are its progress, not its dependencies).
 func BlockedBy(p *domain.Projection, thing string) Blocked {
-	v := p.DepView()
+	return blockedByWith(p, p.DepView(), thing)
+}
+
+// blockedByWith is BlockedBy over a shared DepView (one view serves a whole
+// sweep, e.g. NearReady).
+func blockedByWith(p *domain.Projection, v *domain.DepView, thing string) Blocked {
 	own := leafSet(p, thing)
 
 	frontier := map[string]struct{}{}

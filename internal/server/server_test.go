@@ -296,11 +296,16 @@ func TestEndToEndFlow(t *testing.T) {
 	}
 
 	// Analytics answer over the same projection.
-	ready := e.callList("GET", "/api/v1/analytics/ready", 200)
-	if len(ready) != 1 || str(ready[0], "thing") != b {
+	readyResp := e.call("GET", "/api/v1/analytics/ready", nil, 200)
+	ready := readyResp["ready"].([]any)
+	if len(ready) != 1 || str(ready[0].(map[string]any), "thing") != b {
 		t.Fatalf("ready list: %v", ready)
 	}
-	if got := e.callList("GET", "/api/v1/analytics/ready?project="+f.project+"&type="+f.typ, 200); len(got) != 1 {
+	if nr := readyResp["near_ready"].([]any); len(nr) != 0 {
+		t.Fatalf("near_ready: %v, want empty (nothing blocked)", nr)
+	}
+	filtered := e.call("GET", "/api/v1/analytics/ready?project="+f.project+"&type="+f.typ, nil, 200)
+	if got := filtered["ready"].([]any); len(got) != 1 {
 		t.Fatalf("filtered ready list: %v", got)
 	}
 	board := e.callList("GET", "/api/v1/analytics/resource-board", 200)
@@ -382,6 +387,68 @@ func TestCRUDLifecycle(t *testing.T) {
 	var env2 map[string]any
 	if err := json.Unmarshal(b, &env2); err != nil || errKind(env2) != "method_not_allowed" {
 		t.Fatalf("PATCH dependency envelope: %s", b)
+	}
+}
+
+// TestNearReadyEndpoint drives the near_ready side of GET /analytics/ready:
+// a chain of blocked things with their declared frontiers and blocker
+// statuses, the ?near override with its cap, and 400 on garbage.
+func TestNearReadyEndpoint(t *testing.T) {
+	e := newEnv(t)
+	f := e.seed()
+
+	// Chain a ← b ← c, plus d with three independent blockers (a, b, x).
+	a := e.thing(f, "a")
+	b := e.thing(f, "b")
+	c := e.thing(f, "c")
+	d := e.thing(f, "d")
+	x := e.thing(f, "x")
+	for _, edge := range [][2]string{{b, a}, {c, b}, {d, a}, {d, b}, {d, x}} {
+		e.call("POST", "/api/v1/dependencies", map[string]any{"from": edge[0], "to": edge[1]}, 201)
+	}
+
+	resp := e.call("GET", "/api/v1/analytics/ready", nil, 200)
+	nr := resp["near_ready"].([]any)
+	// Default cutoff 2: b (waits on a), c (waits on b), and d — its direct
+	// blockers {a, b, x} reduce to {b, x} because b itself depends on a.
+	// Sorted: frontier size ascending, then thing id.
+	if len(nr) != 3 {
+		t.Fatalf("near_ready: %v, want 3 entries", nr)
+	}
+	first := nr[0].(map[string]any)
+	if str(first, "thing") != b || first["count"].(float64) != 1 {
+		t.Fatalf("first near_ready entry: %v, want %s with count 1", first, b)
+	}
+	frontier := first["frontier"].([]any)
+	blocker := frontier[0].(map[string]any)
+	if str(blocker, "thing") != a || str(blocker, "status") != "ready" {
+		t.Fatalf("frontier of b: %v, want [{%s ready}]", frontier, a)
+	}
+	last := nr[2].(map[string]any)
+	if str(last, "thing") != d || last["count"].(float64) != 2 {
+		t.Fatalf("last near_ready entry: %v, want %s with count 2 (a reduced away)", last, d)
+	}
+
+	// ?near=1 narrows to single-blocker entries.
+	resp = e.call("GET", "/api/v1/analytics/ready?near=1", nil, 200)
+	if nr := resp["near_ready"].([]any); len(nr) != 2 {
+		t.Fatalf("near=1: %v, want 2 entries", nr)
+	}
+	// Values beyond the cap behave like the cap (5), not an error.
+	e.call("GET", "/api/v1/analytics/ready?near=99", nil, 200)
+
+	// Garbage is a 400 with the envelope.
+	for _, bad := range []string{"zero", "0", "-1", "1.5"} {
+		m := e.call("GET", "/api/v1/analytics/ready?near="+bad, nil, 400)
+		if errKind(m) != "bad_request" {
+			t.Fatalf("near=%s: %v, want bad_request", bad, m)
+		}
+	}
+
+	// Filters apply to near_ready too.
+	resp = e.call("GET", "/api/v1/analytics/ready?project=pr_none", nil, 200)
+	if nr := resp["near_ready"].([]any); len(nr) != 0 {
+		t.Fatalf("filtered near_ready: %v, want empty", nr)
 	}
 }
 

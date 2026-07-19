@@ -64,6 +64,19 @@ const (
 	KindConsumable = "consumable"
 )
 
+// Metadata field kinds (DESIGN.md §5.3): the editor-form widgets a declared
+// metadata field may ask for. The empty string in a payload means the
+// default, FieldKindText.
+const (
+	FieldKindText   = "text"
+	FieldKindNumber = "number"
+	FieldKindDate   = "date"
+	FieldKindSelect = "select"
+)
+
+// FieldKinds is the closed set of metadata field kinds, in a fixed order.
+var FieldKinds = []string{FieldKindText, FieldKindNumber, FieldKindDate, FieldKindSelect}
+
 // Event type names of the domain catalog.
 const (
 	TypeStateDefined    = "state.defined"
@@ -219,25 +232,93 @@ func (p *StateRetracted) Validate() error { return nil }
 
 // ── vocabulary: thing types ──
 
-// TypeDefined declares a thing type (v1).
+// MetadataField is one declared metadata field shape on a thing type or
+// resource type (DESIGN.md §5.3): a UI affordance that drives editing forms.
+// The engine computes nothing off metadata and the log stays permissive —
+// instance metadata is never validated against declarations; Required is a
+// form hint, not schema enforcement.
+type MetadataField struct {
+	// Key is the metadata key the field edits; required, unique within the
+	// declaring type.
+	Key string `json:"key"`
+	// Label is the optional display label (the key shows otherwise).
+	Label string `json:"label,omitempty"`
+	// Kind selects the editor widget; empty means FieldKindText.
+	Kind string `json:"kind,omitempty"`
+	// Options are the choices of a select field — non-empty strings, legal
+	// and required exactly when Kind is FieldKindSelect.
+	Options []string `json:"options,omitempty"`
+	// Required marks the field as expected by the form — a hint only.
+	Required bool `json:"required,omitempty"`
+}
+
+// validateFields shape-checks a declared metadata field list: non-empty
+// unique keys, a known kind, and options present iff the kind is select.
+func validateFields(fields []MetadataField) error {
+	seen := make(map[string]bool, len(fields))
+	for i, f := range fields {
+		if f.Key == "" {
+			return fmt.Errorf("fields[%d]: key must not be empty", i)
+		}
+		if seen[f.Key] {
+			return fmt.Errorf("fields[%d]: key %q declared twice", i, f.Key)
+		}
+		seen[f.Key] = true
+		switch f.Kind {
+		case "", FieldKindText, FieldKindNumber, FieldKindDate:
+			if len(f.Options) > 0 {
+				return fmt.Errorf("fields[%d] (%s): options are only legal with kind %q", i, f.Key, FieldKindSelect)
+			}
+		case FieldKindSelect:
+			if len(f.Options) == 0 {
+				return fmt.Errorf("fields[%d] (%s): kind %q requires options", i, f.Key, FieldKindSelect)
+			}
+			for j, o := range f.Options {
+				if o == "" {
+					return fmt.Errorf("fields[%d] (%s): options[%d] must not be empty", i, f.Key, j)
+				}
+			}
+		default:
+			return fmt.Errorf("fields[%d] (%s): kind %q is not one of %v", i, f.Key, f.Kind, FieldKinds)
+		}
+	}
+	return nil
+}
+
+// TypeDefined declares a thing type (v1). Fields is the optional declared
+// metadata field list — additive, so v stays 1 and older events simply lack
+// it.
 type TypeDefined struct {
-	Name        string `json:"name"`
-	Color       string `json:"color,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name        string          `json:"name"`
+	Color       string          `json:"color,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Fields      []MetadataField `json:"fields,omitempty"`
 }
 
 // Validate implements the payload contract.
-func (p *TypeDefined) Validate() error { return requireName(p.Name) }
+func (p *TypeDefined) Validate() error {
+	if err := requireName(p.Name); err != nil {
+		return err
+	}
+	return validateFields(p.Fields)
+}
 
-// TypeSuperseded is the full replacement of a thing type's attributes (v1).
+// TypeSuperseded is the full replacement of a thing type's attributes,
+// declared metadata fields included (v1).
 type TypeSuperseded struct {
-	Name        string `json:"name"`
-	Color       string `json:"color,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name        string          `json:"name"`
+	Color       string          `json:"color,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Fields      []MetadataField `json:"fields,omitempty"`
 }
 
 // Validate implements the payload contract.
-func (p *TypeSuperseded) Validate() error { return requireName(p.Name) }
+func (p *TypeSuperseded) Validate() error {
+	if err := requireName(p.Name); err != nil {
+		return err
+	}
+	return validateFields(p.Fields)
+}
 
 // TypeRetracted tombstones a thing type (v1).
 type TypeRetracted struct{}
@@ -521,26 +602,40 @@ func (p *RequirementRetracted) Validate() error { return nil }
 
 // ── vocabulary: resource types ──
 
-// ResourceTypeDefined declares a resource type (v1).
+// ResourceTypeDefined declares a resource type (v1). Fields is the optional
+// declared metadata field list — additive, so v stays 1 and older events
+// simply lack it.
 type ResourceTypeDefined struct {
-	Name        string `json:"name"`
-	Color       string `json:"color,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name        string          `json:"name"`
+	Color       string          `json:"color,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Fields      []MetadataField `json:"fields,omitempty"`
 }
 
 // Validate implements the payload contract.
-func (p *ResourceTypeDefined) Validate() error { return requireName(p.Name) }
+func (p *ResourceTypeDefined) Validate() error {
+	if err := requireName(p.Name); err != nil {
+		return err
+	}
+	return validateFields(p.Fields)
+}
 
 // ResourceTypeSuperseded is the full replacement of a resource type's
-// attributes (v1).
+// attributes, declared metadata fields included (v1).
 type ResourceTypeSuperseded struct {
-	Name        string `json:"name"`
-	Color       string `json:"color,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name        string          `json:"name"`
+	Color       string          `json:"color,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Fields      []MetadataField `json:"fields,omitempty"`
 }
 
 // Validate implements the payload contract.
-func (p *ResourceTypeSuperseded) Validate() error { return requireName(p.Name) }
+func (p *ResourceTypeSuperseded) Validate() error {
+	if err := requireName(p.Name); err != nil {
+		return err
+	}
+	return validateFields(p.Fields)
+}
 
 // ResourceTypeRetracted tombstones a resource type (v1).
 type ResourceTypeRetracted struct{}

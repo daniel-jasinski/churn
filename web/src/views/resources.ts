@@ -8,6 +8,8 @@ import { closeModal, openModal } from '../modal';
 import { store } from '../store';
 import { showError, toast } from '../toast';
 import { reqText } from '../ui/bits';
+import { helpButton } from '../ui/help';
+import { metaForm } from '../ui/metaform';
 import { openCapabilityEditor, openResourceTypeEditor } from './vocab';
 
 // typeFilter is the board's resource-type filter ('' = all); module-level so
@@ -23,7 +25,7 @@ export function renderResources(root: HTMLElement): void {
     typeFilter = '';
   }
   const toolbar = h('div', { class: 'toolbar' },
-    h('h2', null, 'Resources'),
+    h('h2', null, 'Resources'), helpButton('resources'),
     store.resourceTypes.length > 0
       ? select([
         { value: '', label: 'all resource types' },
@@ -64,9 +66,9 @@ export function renderResources(root: HTMLElement): void {
 }
 
 function modelingGuidance(): string {
-  return 'Modeling guidance (§2.3): if individuals within a group differ in skills, or you care which ' +
-    'one did the work, model them as named resources sharing capability tags — fungibility then emerges ' +
-    'from the capability match. Pools are for genuinely interchangeable units you don’t track individually.';
+  return 'Named resources suit individuals whose skills differ, or where it matters which one did the ' +
+    'work — give them shared capability tags. Pools suit genuinely interchangeable units you never ' +
+    'track individually. The ? explains how to choose.';
 }
 
 function row(r: ResourceBoardRow): HTMLElement {
@@ -93,7 +95,9 @@ function row(r: ResourceBoardRow): HTMLElement {
 
   const availBtn = h('button', {
     class: 'btn btn-sm mut ' + (res.available ? 'btn-ok' : 'btn-warn'),
-    title: res.available ? 'Mark unavailable (capacity counts as 0; open allocations stay — reality wins)' : 'Mark available',
+    title: res.available
+      ? 'Mark unavailable: stops new starts, never kicks off current work'
+      : 'Mark available',
     onclick: () => toggleAvailability(res),
   }, res.available ? 'available' : 'unavailable');
 
@@ -102,7 +106,7 @@ function row(r: ResourceBoardRow): HTMLElement {
       h('b', null, res.name),
       res.type ? chip(store.resourceType(res.type)?.name ?? res.type, store.resourceType(res.type)?.color, 'chip-type') : null,
       res.named ? chip('named', undefined, 'chip-dim') : chip(`pool ×${res.capacity}`, undefined, 'chip-dim'),
-      res.over_allocated ? h('span', { class: 'badge badge-alert', title: 'allocated units exceed effective capacity (§2.5)' }, '▲ over-allocated') : null,
+      res.over_allocated ? h('span', { class: 'badge badge-alert', title: 'more units are allocated than are currently usable — current work keeps running; consider pausing some of it' }, '▲ over-allocated') : null,
       h('span', { class: 'spacer' }),
       h('span', { class: 'muted' }, `${res.allocated}/${eff} used · cap ${res.capacity}`),
       availBtn,
@@ -168,7 +172,7 @@ function toggleAvailability(res: Resource): void {
     field('Note', noteIn),
     res.available && res.allocated > 0
       ? h('p', { class: 'notice notice-warn' },
-        `${res.allocated} unit(s) are allocated right now. They stay allocated — reality wins; the affected things get an over-allocated badge (§2.5).`)
+        `${res.allocated} unit(s) are allocated right now. They stay allocated — going unavailable never kicks off current work; it just stops new starts, and the affected work gets an over-allocated badge.`)
       : null,
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
@@ -182,7 +186,7 @@ function toggleAvailability(res: Resource): void {
           } catch (e) { showError(e); }
         },
       }, res.available ? 'Mark unavailable' : 'Mark available')));
-  openModal(`${res.name}: availability`, body);
+  openModal(`${res.name}: availability`, body, { help: 'availability' });
 }
 
 export function openResourceEditor(existing?: Resource): void {
@@ -232,14 +236,27 @@ export function openResourceEditor(existing?: Resource): void {
         h('option', { value: o.value, selected: o.value === rt.id }, o.label)));
       typeSel.value = rt.id;
       lastType = rt.id;
+      typeSel.dispatchEvent(new Event('change')); // refresh declared fields
     });
+  });
+
+  // metadata: the resource TYPE's declared fields + free-form rows (untyped
+  // resource → free-form only). Runs after the NEW_RT handler, which has
+  // already reverted/settled typeSel.value.
+  const rtFieldsOf = (rtId: string) => (rtId ? store.resourceType(rtId)?.fields ?? [] : []);
+  const mf = metaForm(existing?.metadata, rtFieldsOf(typeSel.value));
+  typeSel.addEventListener('change', () => {
+    if (typeSel.value !== NEW_RT) mf.setFields(rtFieldsOf(typeSel.value));
   });
 
   const body = h('div', null,
     field('Name', nameIn),
-    field('Shape', namedSel, modelingGuidance()),
+    field('Shape', h('span', { class: 'row-help' }, namedSel, helpButton('poolVsNamed')), modelingGuidance()),
     capWrap,
     field('Type', typeSel, 'optional categorization (person, room, tool…) — the engine matches on capabilities, never on type'),
+    h('details', { class: 'sub', open: Object.keys(existing?.metadata ?? {}).length > 0 || rtFieldsOf(typeSel.value).length > 0 },
+      h('summary', null, 'Metadata'),
+      mf.el),
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
       h('button', {
@@ -248,13 +265,17 @@ export function openResourceEditor(existing?: Resource): void {
           const name = nameIn.value.trim();
           if (!name) { toast('Name is required.', 'error'); return; }
           const named = namedSel.value === 'named';
-          // Supersession is full replacement (DESIGN §5.2): fields this
-          // dialog does not expose must be carried over or they are cleared.
+          const metaErr = mf.firstError();
+          if (metaErr) { toast(metaErr, 'error', 7000); return; }
+          const md = mf.read();
+          // Supersession is full replacement (DESIGN §5.2). The dialog now
+          // EDITS metadata (declared fields + free-form rows show all of
+          // it), so what it submits is the complete new version.
           const data = {
             name, kind: 'reusable', named,
             capacity: named ? 1 : Math.max(1, Number(capIn.value) || 1),
             ...(typeSel.value ? { type: typeSel.value } : {}),
-            ...(existing?.metadata ? { metadata: existing.metadata } : {}),
+            ...(Object.keys(md).length > 0 ? { metadata: md } : {}),
           };
           try {
             if (existing) await api.updateResource(existing.id, data, existing.version);
@@ -265,6 +286,6 @@ export function openResourceEditor(existing?: Resource): void {
           } catch (e) { showError(e); }
         },
       }, existing ? 'Save' : 'Create')));
-  openModal(existing ? `Edit ${existing.name}` : 'New resource', body);
+  openModal(existing ? `Edit ${existing.name}` : 'New resource', body, { wide: true, help: 'resourceEditor' });
   nameIn.focus();
 }

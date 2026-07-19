@@ -3,8 +3,8 @@
 
 import {
   api, setMutationsDisabled,
-  CapabilityDef, Dependency, Project, ReadyEntry, Requirement, Resource,
-  ResourceType, Semantic, StateDef, Thing, TypeDef, Weights, Workspace,
+  CapabilityDef, Dependency, NearReadyEntry, Project, ReadyEntry, Requirement,
+  Resource, ResourceType, Semantic, StateDef, Thing, TypeDef, Weights, Workspace,
 } from './api';
 import { debounce } from './dom';
 
@@ -22,6 +22,10 @@ class Store {
   resourceTypes: ResourceType[] = [];
   capabilities: CapabilityDef[] = [];
   ready: ReadyEntry[] = [];
+  nearReady: NearReadyEntry[] = [];
+  /** nearN is the almost-ready frontier cutoff (?near=, 2 = server default,
+   * max 5); the ready board's widen control sets it. */
+  nearN = 2;
   weights: Weights | null = null;
   workspace: Workspace | null = null;
 
@@ -126,7 +130,7 @@ class Store {
         states, types, resourceTypes, capabilities, ready, weights, workspace] = await Promise.all([
         api.projects(), api.things(), api.resources(), api.dependencies(),
         api.requirements(), api.states(), api.types(), api.resourceTypes(),
-        api.capabilities(), api.ready(), api.settings(), api.workspace(),
+        api.capabilities(), api.ready({ near: this.nearN }), api.settings(), api.workspace(),
       ]);
       this.projects = projects;
       this.things = things;
@@ -137,7 +141,8 @@ class Store {
       this.types = types;
       this.resourceTypes = resourceTypes;
       this.capabilities = capabilities;
-      this.ready = ready;
+      this.ready = ready.ready;
+      this.nearReady = ready.near_ready;
       this.weights = weights;
       this.workspace = workspace;
       this.loaded = true;

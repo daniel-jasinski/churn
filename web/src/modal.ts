@@ -17,11 +17,18 @@ export function closeModal(): void {
 }
 
 /** openModal shows `content` in an overlay (stacked over any open modal)
- * and returns the body element. */
-export function openModal(title: string, content: HTMLElement, opts: { wide?: boolean } = {}): HTMLElement {
+ * and returns the body element. `help` names a help topic: a "?" appears in
+ * the title bar and opens the topic stacked over this dialog. The help
+ * button is injected lazily (modalHelpButton) to avoid an import cycle. */
+export let modalHelpButton: ((topic: string) => HTMLElement) | null = null;
+export function setModalHelpButton(fn: (topic: string) => HTMLElement): void {
+  modalHelpButton = fn;
+}
+
+export function openModal(title: string, content: HTMLElement, opts: { wide?: boolean; help?: string } = {}): HTMLElement {
   const box = h('div', { class: 'modal' + (opts.wide ? ' modal-wide' : '') },
     h('div', { class: 'modal-head' },
-      h('h3', null, title),
+      h('h3', null, title, opts.help && modalHelpButton ? modalHelpButton(opts.help) : null),
       h('button', { class: 'btn btn-ghost', onclick: () => closeTop(), title: 'Close (Esc)' }, '×')),
     h('div', { class: 'modal-body' }, content));
   const overlay = h('div', {

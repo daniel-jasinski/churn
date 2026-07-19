@@ -159,7 +159,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/dependencies/{id}", func(rw http.ResponseWriter, r *http.Request) {
 		writeError(rw, &apiError{
 			status: http.StatusMethodNotAllowed, kind: "method_not_allowed",
-			message: "dependencies have no supersession (§5.2 catalog): retract and re-assert instead",
+			message: "dependency edges cannot be edited in place: retract the edge and assert a new one",
 		})
 	})
 

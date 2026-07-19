@@ -43,7 +43,8 @@ func fullLog() []event.Envelope {
 		initEv(1, t0),
 		envE(2, t0, event.TypeStateDefined, "wr_1", "st_p", `{"name":"todo","semantic":"pending"}`),
 		envE(3, t0, event.TypeStateDefined, "wr_1", "st_a", `{"name":"in_progress","semantic":"active"}`),
-		envE(4, t0, event.TypeTypeDefined, "wr_1", "ty_t", `{"name":"task"}`),
+		envE(4, t0, event.TypeTypeDefined, "wr_1", "ty_t",
+			`{"name":"task","fields":[{"key":"prio","kind":"select","options":["low","high"],"required":true}]}`),
 		envE(5, t0, event.TypeCapabilityDefined, "wr_1", "cap_c", `{"name":"editing"}`),
 		envE(6, t0, event.TypeProjectCreated, "wr_1", "pr_p", `{"name":"Alpha","metadata":{"k":"v"}}`),
 		envE(7, t0, event.TypeThingCreated, "wr_1", "th_parent", `{"name":"Workstream","project":"pr_p","type":"ty_t"}`),
@@ -55,7 +56,8 @@ func fullLog() []event.Envelope {
 		envE(13, t0, event.TypeCapabilityGranted, "wr_1", "rs_r", `{"capability":"cap_c"}`),
 		envE(14, t0, event.TypeThingStateChanged, "wr_1", "th_x", `{"state":"st_a"}`),
 		envE(15, t0, event.TypeAllocationOpened, "wr_1", "al_a", `{"quantity":1,"requirement":"req_r","resource":"rs_r","thing":"th_x"}`),
-		envE(16, t0, event.TypeResourceTypeDefined, "wr_1", "rt_m", `{"name":"machine"}`),
+		envE(16, t0, event.TypeResourceTypeDefined, "wr_1", "rt_m",
+			`{"name":"machine","fields":[{"key":"room","kind":"select","options":["a","b"]}]}`),
 		envE(17, t0, event.TypeResourceSuperseded, "wr_1", "rs_r", `{"capacity":2,"kind":"reusable","name":"Reviewers","type":"rt_m"}`),
 	}
 }
@@ -96,6 +98,45 @@ func TestFoldFullLog(t *testing.T) {
 	}
 	if al := p.Allocations["al_a"]; !al.Open || al.RequirementVersion != 11 {
 		t.Fatalf("allocation = %+v, want open with requirement version 11", al)
+	}
+	wantFields := []MetadataField{{Key: "prio", Kind: "select", Options: []string{"low", "high"}, Required: true}}
+	if got := p.Types["ty_t"].Fields; !reflect.DeepEqual(got, wantFields) {
+		t.Fatalf("ty_t fields = %+v, want %+v", got, wantFields)
+	}
+	if got := p.ResourceTypes["rt_m"].Fields; len(got) != 1 || got[0].Key != "room" {
+		t.Fatalf("rt_m fields = %+v", got)
+	}
+}
+
+// TestMetadataFieldDeclarationsFold: declared metadata fields fold onto the
+// type entity with Kind normalized to its default, and supersession is full
+// replacement — a superseding payload without fields drops the declaration
+// (§5.2, §5.3).
+func TestMetadataFieldDeclarationsFold(t *testing.T) {
+	log := []event.Envelope{
+		initEv(1, t0),
+		envE(2, t0, event.TypeTypeDefined, "wr_1", "ty_t",
+			`{"name":"task","fields":[{"key":"ref","label":"Ticket"},{"key":"due","kind":"date"}]}`),
+	}
+	p, err := Fold(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []MetadataField{
+		{Key: "ref", Label: "Ticket", Kind: "text"}, // kind defaulted
+		{Key: "due", Kind: "date"},
+	}
+	if got := p.Types["ty_t"].Fields; !reflect.DeepEqual(got, want) {
+		t.Fatalf("fields = %+v, want %+v", got, want)
+	}
+
+	p, err = Fold(append(log,
+		envE(3, t0, event.TypeTypeSuperseded, "wr_1", "ty_t", `{"name":"task"}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Types["ty_t"].Fields; got != nil {
+		t.Fatalf("fields after fieldless supersession = %+v, want none (full replacement)", got)
 	}
 }
 
@@ -203,8 +244,11 @@ func TestCloneIsIndependent(t *testing.T) {
 		{"States entry", func(c *Projection) { c.States["st_p"].Name = "mutated" }},
 		{"Types map", func(c *Projection) { c.Types["ty_new"] = &ThingType{Name: "x"} }},
 		{"Types entry", func(c *Projection) { c.Types["ty_t"].Color = "mutated" }},
+		{"Types.Fields", func(c *Projection) { c.Types["ty_t"].Fields[0].Key = "mutated" }},
+		{"Types.Fields options", func(c *Projection) { c.Types["ty_t"].Fields[0].Options[0] = "mutated" }},
 		{"ResourceTypes map", func(c *Projection) { c.ResourceTypes["rt_new"] = &ResourceType{Name: "x"} }},
 		{"ResourceTypes entry", func(c *Projection) { c.ResourceTypes["rt_m"].Color = "mutated" }},
+		{"ResourceTypes.Fields", func(c *Projection) { c.ResourceTypes["rt_m"].Fields[0].Options[0] = "mutated" }},
 		{"Capabilities map", func(c *Projection) { c.Capabilities["cap_new"] = &Capability{} }},
 		{"Capabilities entry", func(c *Projection) { c.Capabilities["cap_c"].Name = "mutated" }},
 		{"Projects map", func(c *Projection) { c.Projects["pr_new"] = &Project{} }},

@@ -36,5 +36,5 @@ export function openAsOfPicker(): void {
 
 /** asOfButton is the toolbar entry point shown on graph/tree views. */
 export function asOfButton(): HTMLElement {
-  return h('button', { class: 'btn btn-ghost', onclick: openAsOfPicker, title: 'View a past state (§3.6)' }, '🕰 past…');
+  return h('button', { class: 'btn btn-ghost', onclick: openAsOfPicker, title: 'View a past state of the workspace (read-only)' }, '🕰 past…');
 }

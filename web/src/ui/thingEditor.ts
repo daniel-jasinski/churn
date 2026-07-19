@@ -8,6 +8,7 @@ import { closeModal, openModal } from '../modal';
 import { store } from '../store';
 import { showError, toast } from '../toast';
 import { isPromotionRejection, offerPromotion } from './promotion';
+import { metaForm } from './metaform';
 import { openProjectEditor } from './projectEditor';
 import { openCapabilityEditor, openTypeEditor } from '../views/vocab';
 
@@ -70,6 +71,7 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
   });
   const typeSel = select(store.types.map((t) => ({ value: t.id, label: t.name })),
     existing?.type ?? store.types[0]?.id);
+  const declaredFieldsOf = (typeId: string) => store.type(typeId)?.fields ?? [];
   const parentOpts = () => [{ value: '', label: '(top level)' },
     ...store.things
       .filter((t) => t.project === (isEdit ? projectId : projectSel.value) && t.id !== existing?.id)
@@ -81,18 +83,16 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
     parentSel = fresh;
   });
 
-  // metadata rows
-  const metaBody = h('div', { class: 'kv-rows' });
-  const addMetaRow = (k = '', v = '') => {
-    const row = h('div', { class: 'kv-row' },
-      h('input', { type: 'text', value: k, placeholder: 'key' }),
-      h('input', { type: 'text', value: v, placeholder: 'value (JSON or text)' }),
-      h('button', { class: 'btn btn-ghost', onclick: () => row.remove(), title: 'remove' }, '×'));
-    metaBody.appendChild(row);
-  };
-  for (const [k, v] of Object.entries(existing?.metadata ?? {})) {
-    addMetaRow(k, typeof v === 'string' ? v : JSON.stringify(v));
-  }
+  // metadata: the TYPE's declared fields as proper inputs + free-form rows
+  // for undeclared keys; the declared part follows the type dropdown, and
+  // the section pops open whenever the selected type declares fields.
+  const mf = metaForm(existing?.metadata, declaredFieldsOf(typeSel.value));
+  let metaDetails: HTMLDetailsElement | null = null;
+  typeSel.addEventListener('change', () => {
+    const fields = declaredFieldsOf(typeSel.value);
+    mf.setFields(fields);
+    if (metaDetails && fields.length > 0) metaDetails.open = true;
+  });
 
   // requirements rows (leaves only; composites carry none)
   const reqRows: ReqRow[] = (existing ? store.requirementsOf(existing.id) : []).map((r) => ({
@@ -175,7 +175,7 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
   const thingLabel = (t: Thing): string => {
     let l = t.name;
     if (t.project !== projectId) l += ` — ${store.project(t.project)?.name ?? t.project}`;
-    if (t.composite) l += ' (composite: the whole subtree, §2.1)';
+    if (t.composite) l += ' (container: waits for its whole subtree)';
     return l;
   };
 
@@ -236,20 +236,13 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
     const name = nameIn.value.trim();
     if (!name) { toast('Name is required.', 'error'); return; }
     if (!typeSel.value) { toast('Define a thing type first (vocabulary).', 'error'); return; }
-    const metadata: Record<string, unknown> = {};
-    let anyMeta = false;
-    for (const row of Array.from(metaBody.children)) {
-      const [kIn, vIn] = Array.from(row.querySelectorAll('input'));
-      const k = kIn?.value.trim();
-      if (!k) continue;
-      const raw = vIn?.value ?? '';
-      try { metadata[k] = JSON.parse(raw); } catch { metadata[k] = raw; }
-      anyMeta = true;
-    }
+    const metaErr = mf.firstError();
+    if (metaErr) { toast(metaErr, 'error', 7000); return; }
+    const metadata = mf.read();
     const base = {
       name, type: typeSel.value,
       ...(parentSel.value ? { parent: parentSel.value } : {}),
-      ...(anyMeta ? { metadata } : {}),
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
     };
     // ONE atomic /batch: the thing create/supersession plus every
     // requirement retract/assert. A new thing's requirements reference its
@@ -313,10 +306,12 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
       field('Project', projectSel),
       field('Type', typeSel),
       field('Parent (containment)', parentSel)),
-    h('details', { class: 'sub' },
+    (metaDetails = h('details', {
+      class: 'sub',
+      open: Object.keys(existing?.metadata ?? {}).length > 0 || declaredFieldsOf(typeSel.value).length > 0,
+    },
       h('summary', null, 'Metadata'),
-      metaBody,
-      h('button', { class: 'btn btn-ghost', onclick: () => addMetaRow() }, '+ key')),
+      mf.el)),
     h('details', { class: 'sub', open: reqRows.length > 0 },
       h('summary', null, 'Requirements (leaves only)'),
       reqBody,
@@ -353,7 +348,7 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
     return el;
   }
 
-  openModal(isEdit ? `Edit ${existing.name}` : 'New thing', body, { wide: true });
+  openModal(isEdit ? `Edit ${existing.name}` : 'New thing', body, { wide: true, help: 'thingEditor' });
   if (preset.focus === 'deps') {
     const sec = body.querySelector('#deps-section');
     sec?.scrollIntoView({ block: 'center' });
