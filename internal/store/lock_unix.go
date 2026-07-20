@@ -23,7 +23,10 @@ func acquireDirLock(path string) (*dirLock, error) {
 		return nil, fmt.Errorf("store: opening %s: %w", path, err)
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		f.Close()
+		// Best-effort cleanup: we hold no lock, and the open descriptor is the
+		// only thing to give back. The flock failure is the error worth
+		// reporting, so a close failure here has nowhere useful to go.
+		_ = f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
 			return nil, fmt.Errorf("%w (%s)", ErrLocked, path)
 		}

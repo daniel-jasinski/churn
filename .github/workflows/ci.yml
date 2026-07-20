@@ -55,8 +55,21 @@ jobs:
 
       # Pinned: .golangci.yml uses the v2 config schema, and the action major
       # must match the linter major (v8 → golangci-lint v2).
-      - name: golangci-lint
+      #
+      # Linting runs once per GOOS because build constraints hide files from
+      # the linter that is not targeting them: a Linux-only pass never sees
+      # lock_windows.go, and a Windows-only pass never sees lock_unix.go.
+      # Both passes run on Linux so the matrix stays single-lint.
+      - name: golangci-lint (linux)
         if: matrix.os == 'ubuntu-latest'
         uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12.2
+
+      - name: golangci-lint (windows sources)
+        if: matrix.os == 'ubuntu-latest'
+        uses: golangci/golangci-lint-action@v8
+        env:
+          GOOS: windows
         with:
           version: v2.12.2

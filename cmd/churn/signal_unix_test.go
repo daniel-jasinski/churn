@@ -76,7 +76,7 @@ func TestServeShutsDownOnSIGTERM(t *testing.T) {
 	}
 
 	if err := srv.Process.Signal(syscall.SIGTERM); err != nil {
-		t.Fatalf("signalling: %v", err)
+		t.Fatalf("signaling: %v", err)
 	}
 	done := make(chan error, 1)
 	go func() { done <- srv.Wait() }()
