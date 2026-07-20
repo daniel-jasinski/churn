@@ -5,7 +5,11 @@
       "name": "churn",
       "runtimeExecutable": "scripts\\dev.cmd",
       "runtimeArgs": [],
-      "port": 8080
+      "port": 8080,
+      "autoPort": true,
+      "env": {
+        "CHURN_DEV_DATA": "workspace-dev2"
+      }
     }
   ]
 }

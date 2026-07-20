@@ -1,9 +1,12 @@
-# Workspace data directories (event logs are user data, never source)
+# Workspace data directories (event logs are user data, never source).
+# workspace* rather than workspace: scripts/dev.{sh,cmd} take CHURN_DEV_DATA
+# so a second dev server can hold its own directory (the store takes an
+# exclusive OS lock, so two servers cannot share one).
 *.db
 *.db-wal
 *.db-shm
 churn.lock
-/workspace/
+/workspace*/
 
 # Build artifacts — the compiled binary, plus the backup copies Windows leaves
 # behind when a running server holds the previous churn.exe open
