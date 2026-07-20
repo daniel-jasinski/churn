@@ -1,51 +1,59 @@
 // views/ready.ts — the ready board (§4.2, the daily driver): columns
 // Ready / Resource-blocked / In progress / Recently done.
+//
+// Rendered at two scopes, both driven by the caller rather than by a filter
+// the view owns: `null` is the workspace screen (#/ready, every project) and
+// a project id is the workbench's Board tab. The sidebar is the only project
+// picker, so this view no longer carries one.
 
 import { NearReadyEntry, ReadyEntry, Thing } from '../api';
 import { h, select, statusDot } from '../dom';
+import { href } from '../router';
 import { store } from '../store';
 import { badgeRow, projectName, reqChips, reqChipsOf, scoreBlock, starveNote, thingLink, typeChip } from '../ui/bits';
 import { openBulkAdd } from '../ui/bulkAdd';
 import { helpButton } from '../ui/help';
 import type { HelpKey } from '../ui/helpContent';
-import { openProjectEditor } from '../ui/projectEditor';
-import { projectSelect } from '../ui/projectSelect';
+import { renderOnboard } from '../ui/onboard';
 import { openThingEditor } from '../ui/thingEditor';
 import { actionsFor, repropose, transitionTo } from '../ui/transition';
 
-// module-level filter state survives re-renders; the project filter is the
-// STICKY cross-tab selection (store.selectedProject).
+// module-level filter state survives re-renders. The project is NOT in here:
+// it is the caller's scope, so switching projects cannot silently carry a
+// stale filter that the toolbar no longer shows.
 const filter = { type: '', capability: '', text: '' };
 
-export function renderReady(root: HTMLElement): void {
+// scope mirrors the current render's project so the card builders — which sit
+// below the render entry point and take only a Thing — can drop the project
+// label. Inside a project's Board tab every card names the same project, and
+// repeating it on each card is noise, not information.
+let scope: string | null = null;
+
+/** projectLink labels a card with its project, or nothing when the whole
+ * board is already one project. */
+function projectLink(project: string): HTMLElement | null {
+  if (scope) return null;
+  return h('a', { class: 'muted proj-link', href: href('project', project, 'graph') }, projectName(project));
+}
+
+export function renderReady(root: HTMLElement, project: string | null): void {
   if (store.projects.length === 0) {
     // Fresh workspace: point at the one action that unlocks everything else.
-    root.replaceChildren(h('div', { class: 'centered onboard' },
-      h('h2', null, 'Welcome to churn'),
-      h('p', null, 'This workspace is empty. Work lives in ', h('b', null, 'projects'),
-        ' — dependency graphs of things — worked with the shared ', h('b', null, 'resources'), '.'),
-      h('p', null, h('button', {
-        class: 'btn btn-primary mut',
-        onclick: () => openProjectEditor(),
-      }, 'Create your first project')),
-      h('p', { class: 'muted' },
-        'Then add things here (single or ', h('b', null, 'Bulk add'), '), declare resources on the ',
-        h('a', { href: '#/resources' }, 'resource board'),
-        ', and tune the vocabulary of states, types and capabilities under ',
-        h('a', { href: '#/settings/vocab' }, 'Settings → Vocabulary'),
-        '. Sensible default states are already in place.')));
+    renderOnboard(root);
     return;
   }
-  const projFilter = () => store.selectedProject;
+  scope = project;
+  const projFilter = () => project ?? '';
+  const redraw = () => renderReady(root, project);
   const toolbar = h('div', { class: 'toolbar' },
-    projectSelect({ allowAll: true, onPick: () => renderReady(root) }),
+    project ? null : h('h2', null, 'Ready work'),
     select([{ value: '', label: 'all types' },
       ...store.types.map((t) => ({ value: t.id, label: t.name }))],
-    filter.type, (v) => { filter.type = v; renderReady(root); }),
+    filter.type, (v) => { filter.type = v; redraw(); }),
     select([{ value: '', label: 'any capability' },
       ...store.capabilities.map((c) => ({ value: c.id, label: c.name }))],
-    filter.capability, (v) => { filter.capability = v; renderReady(root); }),
-    textFilter(root),
+    filter.capability, (v) => { filter.capability = v; redraw(); }),
+    textFilter(root, project),
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn mut', onclick: () => openBulkAdd(projFilter() || undefined) }, 'Bulk add'),
     h('button', { class: 'btn btn-primary mut', onclick: () => openThingEditor(undefined, { project: projFilter() || undefined }) }, '+ New thing'),
@@ -71,7 +79,11 @@ export function renderReady(root: HTMLElement): void {
   };
 
   const ready = store.ready.filter(matchEntry); // API order: score desc, id
-  const leaves = store.things.filter((t) => !t.composite);
+  // Scoped to the project, but NOT to the type/capability/name filters: the
+  // columns below re-filter with matchThing, while readyEmptyState explains
+  // why THIS board is empty and must count the project's real backlog. An
+  // unscoped `leaves` made the Board tab report another project's blockers.
+  const leaves = store.things.filter((t) => !t.composite && (!project || t.project === project));
   const resBlocked = leaves.filter((t) => t.status === 'resource_blocked' && matchThing(t));
   const working = leaves.filter((t) => t.status === 'working' && matchThing(t));
   const held = leaves.filter((t) => t.status === 'held' && matchThing(t));
@@ -134,7 +146,7 @@ function nearCard(e: NearReadyEntry): HTMLElement {
     h('div', { class: 'card-title' }, thingLink(t), ...badgeRow(t)),
     h('div', { class: 'card-meta' },
       typeChip(t.type),
-      h('a', { class: 'muted proj-link', href: `#/graph/${t.project}` }, projectName(t.project))),
+      projectLink(t.project)),
     h('div', { class: 'near-frontier' },
       h('span', { class: 'muted tiny' }, `waiting on ${e.count}: `),
       ...e.frontier.map((b) => {
@@ -146,20 +158,20 @@ function nearCard(e: NearReadyEntry): HTMLElement {
       })));
 }
 
-function textFilter(root: HTMLElement): HTMLElement {
+function textFilter(root: HTMLElement, project: string | null): HTMLElement {
   const input = h('input', {
     type: 'search', placeholder: 'filter names ( / )', value: filter.text, class: 'search',
-    oninput: () => { filter.text = input.value; rerenderColumnsOnly(root); },
+    oninput: () => { filter.text = input.value; rerenderColumnsOnly(root, project); },
   });
   input.dataset['hotkey'] = 'slash';
   return input;
 }
 
 // Re-render but keep focus in the search box.
-function rerenderColumnsOnly(root: HTMLElement): void {
+function rerenderColumnsOnly(root: HTMLElement, project: string | null): void {
   const active = document.activeElement as HTMLInputElement | null;
   const pos = active?.selectionStart ?? null;
-  renderReady(root);
+  renderReady(root, project);
   if (active?.dataset['hotkey'] === 'slash') {
     const fresh = root.querySelector<HTMLInputElement>('input[data-hotkey="slash"]');
     if (fresh) {
@@ -258,6 +270,6 @@ function baseCard(t: Thing): HTMLElement {
       ...badgeRow(t)),
     h('div', { class: 'card-meta' },
       typeChip(t.type),
-      h('a', { class: 'muted proj-link', href: `#/graph/${t.project}` }, projectName(t.project)),
+      projectLink(t.project),
       t.state ? h('span', { class: 'muted' }, store.state(t.state)?.name ?? '') : null));
 }

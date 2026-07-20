@@ -1,10 +1,16 @@
 // views/resources.ts — the resource board (§4.3): one row per resource with
 // capacity bar, availability toggle + note, open allocations, and the queue
 // of ready/resource-blocked things wanting it.
+//
+// #/resources is the whole board; #/resources/:id focuses one resource. The
+// focused form is the same row, not a second rendering of a resource — a
+// resource has exactly one presentation, and the sidebar just picks which
+// ones are on screen.
 
 import { api, Resource, ResourceBoardRow } from '../api';
 import { chip, field, h, select, statusDot } from '../dom';
 import { closeModal, openModal } from '../modal';
+import { navigate } from '../router';
 import { store } from '../store';
 import { showError, toast } from '../toast';
 import { reqText } from '../ui/bits';
@@ -16,7 +22,16 @@ import { openCapabilityEditor, openResourceTypeEditor } from './vocab';
 // it survives re-renders.
 let typeFilter = '';
 
-export function renderResources(root: HTMLElement): void {
+export function renderResources(root: HTMLElement, focus?: string): void {
+  // A focused id that no longer resolves (retracted, or a different workspace
+  // on the same origin) falls back to the whole board rather than rendering
+  // an empty screen with no way out — and says so in the address bar, so the
+  // sidebar highlight and the URL cannot disagree.
+  if (focus && !store.resources.some((r) => r.id === focus)) {
+    navigate('resources');
+    return;
+  }
+  const focused = focus;
   // A stale filter (type retracted, or a different workspace served on the
   // same origin) must reset, or the board renders empty with the dropdown
   // showing "all" and no change event left to clear it.
@@ -25,8 +40,9 @@ export function renderResources(root: HTMLElement): void {
     typeFilter = '';
   }
   const toolbar = h('div', { class: 'toolbar' },
-    h('h2', null, 'Resources'), helpButton('resources'),
-    store.resourceTypes.length > 0
+    h('h2', null, focused ? store.name(focused) : 'Resources'), helpButton('resources'),
+    focused ? h('a', { class: 'btn btn-sm mut', href: '#/resources' }, '← All resources') : null,
+    !focused && store.resourceTypes.length > 0
       ? select([
         { value: '', label: 'all resource types' },
         ...store.resourceTypes.map((t) => ({ value: t.id, label: t.name })),
@@ -53,6 +69,7 @@ export function renderResources(root: HTMLElement): void {
       return;
     }
     const shown = rows.filter((r) => {
+      if (focused) return r.resource.id === focused;
       if (!typeFilter) return true;
       if (typeFilter === '__untyped__') return !r.resource.type;
       return r.resource.type === typeFilter;

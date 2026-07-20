@@ -32,6 +32,12 @@ export interface Attrs {
   onchange?: (e: Event) => void;
   onsubmit?: (e: SubmitEvent) => void;
   onkeydown?: (e: KeyboardEvent) => void;
+  // aria-* and role reach the setAttribute default branch. Declared rather
+  // than left to fall through an excess-property hole: esbuild strips types
+  // without checking them, so an undeclared attribute is indistinguishable
+  // from a typo'd one.
+  role?: string;
+  [ariaAttr: `aria-${string}`]: unknown;
 }
 
 export function h<K extends keyof HTMLElementTagNameMap>(

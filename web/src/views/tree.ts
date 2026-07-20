@@ -1,6 +1,10 @@
 // views/tree.ts — hierarchy/progress (§4.5): containment tree with progress
 // bars, plus a hand-rolled squarified treemap (SVG) sized by subtree leaf
 // count and colored by completion.
+//
+// Always one project: this is the workbench's Tree tab, and the sidebar is
+// the only project picker. The all-projects column layout it used to carry
+// went with the nav tab it belonged to.
 
 import { api, Thing } from '../api';
 import { h, statusDot } from '../dom';
@@ -10,15 +14,15 @@ import { asOfButton } from '../ui/asof';
 import { badgeRow, typeChip } from '../ui/bits';
 import { openBulkAdd } from '../ui/bulkAdd';
 import { helpButton } from '../ui/help';
-import { projectSelect } from '../ui/projectSelect';
 import { openThingEditor } from '../ui/thingEditor';
 
-export function renderTree(root: HTMLElement): void {
+export function renderTree(root: HTMLElement, project: string): void {
   const toolbar = h('div', { class: 'toolbar' },
-    h('h2', null, 'Hierarchy & progress'), helpButton('tree'),
-    projectSelect({ allowAll: true, onPick: () => renderTree(root) }),
+    // No heading: the workbench header names the project and the tab names
+    // the arrangement. A third title would just repeat both.
+    helpButton('tree'),
     h('span', { class: 'spacer' }),
-    h('button', { class: 'btn mut', onclick: () => openBulkAdd(store.selectedProject || undefined) }, 'Bulk add'),
+    h('button', { class: 'btn mut', onclick: () => openBulkAdd(project || undefined) }, 'Bulk add'),
     asOfButton());
   const content = h('div', { class: 'tree-wrap' }, h('div', { class: 'empty' }, 'Loading…'));
   root.replaceChildren(toolbar, content);
@@ -26,26 +30,27 @@ export function renderTree(root: HTMLElement): void {
   void (async () => {
     let things: Thing[];
     if (store.asOf) {
-      // Only the graph endpoint supports as_of: assemble the past picture
-      // from per-project graph snapshots (projects list is the present one;
-      // projects that did not exist then 404 and are skipped).
+      // Only the graph endpoint supports as_of, so the past picture comes
+      // from this project's graph snapshot (a project that did not exist at
+      // the cursor 404s and simply reads as empty).
       things = [];
-      for (const p of store.projects) {
-        try {
-          const g = await api.graph(p.id, store.asOf);
-          things.push(...g.things);
-        } catch (e) {
-          void e; // project absent at the cursor
-        }
+      try {
+        const g = await api.graph(project, store.asOf);
+        things.push(...g.things);
+      } catch (e) {
+        void e; // the project did not exist at the cursor
       }
     } else {
-      things = store.things;
+      // Scope here, not in draw(): the as-of branch above already yields just
+      // this project, and draw()'s "nothing here yet" guard has to see the
+      // same set either way or an empty project renders as a blank card.
+      things = store.things.filter((t) => t.project === project);
     }
-    draw(content, things);
+    draw(content, things, project);
   })().catch(showError);
 }
 
-function draw(content: HTMLElement, things: Thing[]): void {
+function draw(content: HTMLElement, things: Thing[], project: string): void {
   if (things.length === 0) {
     content.replaceChildren(h('div', { class: 'empty' },
       'Nothing here yet — add things from the ready board, or bulk add a whole outline.'));
@@ -63,19 +68,10 @@ function draw(content: HTMLElement, things: Thing[]): void {
     return Math.max(n, 1);
   };
 
-  const cols = h('div', { class: 'tree-cols' });
-  const shownProjects = store.selectedProject
-    ? store.projects.filter((p) => p.id === store.selectedProject)
-    : store.projects;
-  for (const p of shownProjects) {
-    const roots = childrenOf(undefined, p.id);
-    if (roots.length === 0 && shownProjects.length > 1) continue;
-    cols.append(h('section', { class: 'tree-proj' },
-      h('h3', null, h('a', { href: `#/graph/${p.id}` }, p.name)),
-      h('div', { class: 'treemap-holder' }, treemap(roots, leafCount)),
-      h('ul', { class: 'tree' }, ...roots.map((t) => treeNode(t, childrenOf)))));
-  }
-  content.replaceChildren(cols);
+  const roots = childrenOf(undefined, project);
+  content.replaceChildren(h('section', { class: 'tree-proj' },
+    h('div', { class: 'treemap-holder' }, treemap(roots, leafCount)),
+    h('ul', { class: 'tree' }, ...roots.map((t) => treeNode(t, childrenOf)))));
 }
 
 function treeNode(t: Thing, childrenOf: (id: string | undefined, project: string) => Thing[]): HTMLElement {

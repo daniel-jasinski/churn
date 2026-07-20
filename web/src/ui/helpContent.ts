@@ -15,7 +15,7 @@ export const HELP = {
     title: 'Ready board',
     purpose: 'The daily driver: four live columns — what can start right now, what waits for resources, what is in flight, what recently finished — plus an "Almost ready" strip underneath. Everything is computed from dependencies, states, and resource availability; nothing is curated by hand. Each column header has its own ? with the details of that column.',
     how: [
-      'Filter by project (sticky across tabs), type, capability, or name; press / to jump to the name filter.',
+      'Filter by type, capability, or name; press / to jump to the name filter. The project is the sidebar’s job: this screen spans every project, and a project’s own Board tab is the same board scoped to it.',
       '"+ New thing" creates a single work item; "Bulk add" commits a whole table of items and their dependencies in one atomic step.',
       'Cards move between columns on their own as dependencies finish and resources free — you only record state changes; the sorting into columns is never done by hand.',
     ],
@@ -116,14 +116,13 @@ export const HELP = {
     title: 'Projects',
     purpose: 'Projects partition the workspace for display and filtering: every thing lives in exactly one project. Resources are NOT per-project — they are shared across the whole workspace, which is exactly how cross-project contention becomes visible.',
     how: [
-      'Create and rename freely — renames never break anything, because everything references projects by a stable internal id.',
-      'Retract removes a project, but only once nothing lives in it; the error tells you which things still do.',
-      'Click a project name to open its dependency graph.',
+      'Pick a project to open its workbench — the graph, board and tree are three arrangements of that project’s things, and switching project keeps whichever one you are on.',
+      'Create with +. Rename and retract live in the project’s own dialog, behind "Edit project" in the workbench header.',
+      'Renaming never breaks anything: everything references projects by a stable internal id, not by name.',
     ],
     components: [
-      ['Things', 'how many items of work (including containers) live in the project.'],
-      ['Progress', 'finished leaves out of all non-abandoned leaves.'],
-      ['Retract', 'removal with history: the project stops existing now, but every event about it stays in the log forever.'],
+      ['Count', 'how many leaves in the project are ready to start right now — the number worth acting on. Blank means none are.'],
+      ['Hairline', 'finished leaves out of all non-abandoned leaves, as a progress rule under the name.'],
     ],
   },
   resources: {

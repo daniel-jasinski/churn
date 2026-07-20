@@ -7,14 +7,11 @@ import cytoscapeDagre from 'cytoscape-dagre';
 import { api, Dependency, Graph, Thing } from '../api';
 import { h, select, statusDot } from '../dom';
 import { closeModal, openModal } from '../modal';
-import { navigate } from '../router';
 import { store } from '../store';
 import { showError, toast } from '../toast';
 import { asOfButton } from '../ui/asof';
 import { badgeRow, reqChipsOf, stateChip, typeChip } from '../ui/bits';
 import { helpButton } from '../ui/help';
-import { openProjectEditor } from '../ui/projectEditor';
-import { projectSelect } from '../ui/projectSelect';
 import { openThingEditor } from '../ui/thingEditor';
 import { actionsFor, repropose, transitionTo } from '../ui/transition';
 
@@ -52,19 +49,9 @@ const vs: ViewState = {
 let cy: ReturnType<typeof cytoscape> | null = null;
 let lastGraph: Graph | null = null;
 
-export function renderGraph(root: HTMLElement, projectId?: string): void {
-  if (!projectId) {
-    // No project in the route: resolve the sticky selection to a concrete
-    // project (graph needs one) — last selected, else first alphabetically.
-    const concrete = store.concreteProject();
-    if (!concrete) {
-      renderEmpty(root);
-      return;
-    }
-    navigate('graph', concrete);
-    return;
-  }
-  store.setSelectedProject(projectId); // route is canonical; keep it sticky
+// The workbench resolves the project before it ever calls in, so the graph
+// takes a concrete id — there is no "no project selected" state left to draw.
+export function renderGraph(root: HTMLElement, projectId: string): void {
   if (vs.project !== projectId) {
     vs.project = projectId;
     vs.collapsed = new Set();
@@ -76,7 +63,6 @@ export function renderGraph(root: HTMLElement, projectId?: string): void {
 
   const hint = drawHint();
   const toolbar = h('div', { class: 'toolbar' },
-    projectSelect({ allowAll: false, value: projectId, onPick: (id) => navigate('graph', id) }),
     h('button', {
       class: 'btn mut' + (vs.drawing ? ' btn-warn' : ''),
       title: 'Declare that one thing must wait for another (a dependency edge)',
@@ -114,17 +100,6 @@ function drawHint(): string | null {
     return `now click the prerequisite — what ${store.name(vs.drawFrom)} must wait for`;
   }
   return 'click the DEPENDENT thing first (the one that must wait), then its prerequisite';
-}
-
-function renderEmpty(root: HTMLElement): void {
-  root.replaceChildren(
-    h('div', { class: 'centered' },
-      h('h2', null, 'No projects yet'),
-      h('p', { class: 'empty' }, 'Every thing lives in a project.'),
-      h('p', null, h('button', {
-        class: 'btn btn-primary mut',
-        onclick: () => openProjectEditor(undefined, (p) => navigate('graph', p.id)),
-      }, '+ New project'))));
 }
 
 async function loadAndDraw(canvas: HTMLElement, panel: HTMLElement, projectId: string, root: HTMLElement): Promise<void> {
