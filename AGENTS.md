@@ -37,8 +37,6 @@ a reviewer or a future reader cannot recover from the diff alone.
   distinct points.
 - Scope each commit to one logical change; commit per feature/milestone rather
   than dumping unrelated work together.
-- End every commit message with the trailer:
-  `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
 
 ## Established patterns to preserve
 
