@@ -4,11 +4,10 @@
 
 import { h } from '../dom';
 import { openModal, setModalHelpButton } from '../modal';
-import { HELP } from './helpContent';
+import { HELP, HelpKey } from './helpContent';
 
-export function openHelp(topic: string): void {
+export function openHelp(topic: HelpKey): void {
   const t = HELP[topic];
-  if (!t) return;
   openModal(t.title, h('div', { class: 'help-body' },
     h('p', { class: 'help-purpose' }, t.purpose),
     h('h4', null, 'How to use'),
@@ -22,10 +21,10 @@ export function openHelp(topic: string): void {
 }
 
 /** helpButton renders the round "?" that opens the topic's popup. */
-export function helpButton(topic: string): HTMLElement {
+export function helpButton(topic: HelpKey): HTMLElement {
   return h('button', {
     class: 'help-btn',
-    title: `What is this? (${HELP[topic]?.title ?? topic})`,
+    title: `What is this? (${HELP[topic].title})`,
     onclick: (e: MouseEvent) => { e.preventDefault(); openHelp(topic); },
   }, '?');
 }

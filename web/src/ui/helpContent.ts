@@ -10,26 +10,84 @@ export interface HelpTopic {
   components: [string, string][];
 }
 
-export const HELP: Record<string, HelpTopic> = {
+export const HELP = {
   ready: {
     title: 'Ready board',
-    purpose: 'The daily driver: what can be worked on right now, what is waiting for resources, what is in flight, and what recently finished. Everything here is computed live from dependencies, states, and resource availability — nothing is curated by hand.',
+    purpose: 'The daily driver: four live columns — what can start right now, what waits for resources, what is in flight, what recently finished — plus an "Almost ready" strip underneath. Everything is computed from dependencies, states, and resource availability; nothing is curated by hand. Each column header has its own ? with the details of that column.',
     how: [
       'Filter by project (sticky across tabs), type, capability, or name; press / to jump to the name filter.',
-      'Start a ready card: the tool proposes which concrete resources would satisfy its requirements; you confirm or cancel. If the world changed in between, you get a fresh proposal to review — nothing is committed behind your back.',
-      'Finish / Pause / Abandon / Resume record state changes; Reopen puts a finished or abandoned thing back to pending.',
-      'Click a score to expand exactly how it was computed, term by term.',
-      'Use "Almost ready" at the bottom to see what is only a few blockers away — and what those blockers are.',
+      '"+ New thing" creates a single work item; "Bulk add" commits a whole table of items and their dependencies in one atomic step.',
+      'Cards move between columns on their own as dependencies finish and resources free — you only record state changes; the sorting into columns is never done by hand.',
     ],
     components: [
-      ['Ready', 'all its prerequisites are satisfied AND the resources it needs are free right now. Sorted by the recommendation score (highest first).'],
-      ['Resource-blocked', 'prerequisites are done, but some required resource is busy or unavailable. It will flip to Ready by itself when capacity frees.'],
-      ['In progress', 'currently being worked (holds resource allocations), plus paused work ("held") — paused items say whether they could resume right now.'],
-      ['Recently done', 'finished work, most recently touched first.'],
-      ['Score', 'a transparent ranking aid, not an order: it adds up how much this unlocks, how much waits on it downstream, chain depth, and how long it has starved for resources, minus a penalty for hogging contended resources. Expand it to see every term.'],
-      ['Almost ready', 'pending things whose remaining blockers number at most N (widen with the "blockers ≤" control). Each blocker is shown with its own live status — a dropped blocker means someone must decide: redo it or remove the dependency.'],
+      ['Card', 'one work item: name, type badge, project link, and the actions its current state allows. Only leaf items appear — containers roll up from their children and are never worked directly.'],
+      ['Deps', 'a shortcut into the item’s editor with the dependency section focused — the quickest way to rewire what waits for what.'],
       ['Badges', '⚠ a prerequisite was abandoned but this was allowed to proceed · ⁉ finished yet has unsatisfied prerequisites (worth a look) · ▲ holds more of a resource than is currently available · ↻ its allocations no longer match its edited requirements (use Re-propose).'],
-      ['Re-propose', 'when requirements were edited while work was in flight, this swaps the old allocations for a fresh feasible set in one atomic step — work never stops holding what it needs.'],
+    ],
+  },
+  readyList: {
+    title: 'Ready column',
+    purpose: 'Things that can be started this moment: every prerequisite is satisfied AND the resources they require are free right now. Sorted by the recommendation score, highest first.',
+    how: [
+      'Start: the tool proposes which concrete resources would satisfy the requirements; nothing is committed until you confirm. If someone took a resource in between, you simply review a fresh proposal.',
+      'Click a score to expand exactly how it was computed, term by term; tune the weights on the Settings tab.',
+      'An empty column tells you why it is empty — how much is dependency-blocked vs. resource-blocked — and points at the bottleneck dashboard.',
+    ],
+    components: [
+      ['Score', 'a transparent ranking aid, not an order you must obey: it adds up how much this unlocks, how much waits on it downstream, chain depth, and how long it has starved for resources, minus a penalty for hogging contended resources.'],
+      ['Requirement chips', 'what the item will check out when started: "2× editing" means two units carrying the editing capability; a name means that specific pinned resource.'],
+      ['Start / Edit / Deps', 'begin work (via a confirmable resource proposal), open the full editor, or jump straight to the dependency section.'],
+    ],
+  },
+  resourceBlocked: {
+    title: 'Resource-blocked column',
+    purpose: 'Prerequisites are all done — the only missing ingredient is capacity: some required resource is currently busy or unavailable.',
+    how: [
+      'No action is needed here: a card flips to Ready by itself the moment capacity frees.',
+      'To make that happen sooner, open the Bottlenecks tab — it shows which capability combinations are short and what is holding them.',
+    ],
+    components: [
+      ['Requirement chips', 'the needs that cannot be satisfied right now — the reason the item sits here.'],
+      ['Starvation credit', 'the longer an item waits here, the more recommendation-score credit it accrues, so long-waiting work gets first claim on the unit that finally frees.'],
+    ],
+  },
+  inProgress: {
+    title: 'In progress column',
+    purpose: 'Work that is active right now — holding its resource allocations — plus deliberately paused ("held") work, which holds nothing.',
+    how: [
+      'Finish releases the resources and unblocks dependents; Pause releases them too but keeps dependents blocked; Abandon ends the work without success.',
+      'A held card says whether it could resume right now — whether the resources it needs are free at this moment.',
+      'Re-propose appears when requirements were edited mid-flight (↻ badge): it swaps the outdated allocations for a fresh feasible set in one atomic step — the work never stops holding what it needs.',
+    ],
+    components: [
+      ['Working (blue)', 'active and holding concrete resource allocations, visible on the resource board.'],
+      ['Held (purple)', 'deliberately on hold: holds NO resources, dependents stay blocked, excluded from ready lists.'],
+      ['▲ badge', 'holding more of a resource than is currently usable — normal after capacity drops mid-work; pausing is suggested, never forced.'],
+    ],
+  },
+  recentlyDone: {
+    title: 'Recently done column',
+    purpose: 'The most recently finished work, newest first — a lightweight "what just happened" feed (the last 15 items).',
+    how: [
+      'Reopen puts a finished item back to pending if it turns out not to be done after all — recorded as an ordinary state change; history keeps everything.',
+      'For the complete record beyond 15 items, use the History tab or any item’s "hist" link.',
+    ],
+    components: [
+      ['⁉ badge', 'finished, yet has unsatisfied prerequisites — usually a sign it was closed out of order and worth a second look.'],
+    ],
+  },
+  almostReady: {
+    title: 'Almost ready',
+    purpose: 'Pending things whose remaining blockers number at most N — the near-term pipeline. Watch this strip to see what to clear next so new work keeps becoming available.',
+    how: [
+      'Widen or narrow the horizon with the "blockers ≤" control.',
+      'Each blocker is listed with its own live status; click one to open its history.',
+      'A dropped (abandoned) blocker never resolves on its own — someone must decide: redo that work, or remove the dependency.',
+    ],
+    components: [
+      ['waiting on N', 'how many blockers stand between this item and Ready.'],
+      ['Blocker list', 'only the NEAREST blockers — what must resolve next, not every transitive prerequisite behind them.'],
+      ['Container blockers', 'a dependency you declared on a container shows as that container with its rolled-up status, not as its individual children.'],
     ],
   },
   graph: {
@@ -99,24 +157,44 @@ export const HELP: Record<string, HelpTopic> = {
       ['Pool', 'capacity N interchangeable units; every unit carries the pool’s tags; requirements can never single out one unit.'],
     ],
   },
-  bottlenecks: {
-    title: 'Bottlenecks',
-    purpose: 'Where the flow is stuck and where it would hurt most: contention for resources, structurally critical work, and work that has been starving for capacity.',
+  contention: {
+    title: 'Resource contention',
+    purpose: 'How much open demand for resources cannot be satisfied right now — and which capability combinations are short. This is where "we are waiting on people/equipment" becomes a number.',
     how: [
-      'Start at "unmet requirement units" — that is the one number computed rigorously enough to base decisions on.',
-      'Use the signature table to see WHICH skill combinations are short and which things want them.',
-      'Rank critical things by any of the three columns; they answer different questions and are never added together.',
-      'Check starvation to see what has waited longest — long-starved work automatically gets scoring credit so it claims freed capacity first.',
+      'Start at "unmet requirement units" — the one figure computed rigorously enough to base decisions on.',
+      'Use the signature table to see WHICH capability combinations are short and which things want them.',
+      'Treat the per-capability ratios as an at-a-glance heuristic only — expand them when you want a rough single-tag view.',
     ],
     components: [
       ['Unmet requirement units (trustworthy)', 'how many required units of demand cannot fit onto free resources right now, computed by actually trying every assignment. This is the number to act on.'],
-      ['Per-signature split (indicative)', 'the same shortfall attributed to specific skill-combinations. The split depends on assignment tie-breaks, so treat it as a strong hint, not gospel — the total above is the honest figure.'],
-      ['Per-capability ratios (rough)', 'naive demand/supply per single tag. Double-counts multi-skilled resources and ignores skill combinations — at-a-glance only.'],
+      ['Per-signature split (indicative)', 'the same shortfall attributed to specific capability combinations. The split depends on assignment tie-breaks, so treat it as a strong hint, not gospel — the total above is the honest figure.'],
+      ['Per-capability ratios (rough)', 'naive demand/supply per single tag. Double-counts multi-skilled resources and ignores combinations — at-a-glance only.'],
+      ['Pressure', 'demand divided by matchable supply for that signature — above 1 means the signature is oversubscribed.'],
+    ],
+  },
+  criticality: {
+    title: 'Critical things',
+    purpose: 'Structurally important unfinished work: what gates the most work downstream, what unlocks the most immediately, and what sits on the longest remaining chain.',
+    how: [
+      'Click a column header to rank by it — the three numbers answer different questions and are never added together.',
+      'High reach + low unlock means finishing it helps eventually but frees nothing today (its dependents have other blockers too); high unlock is the quick win.',
+    ],
+    components: [
       ['Downstream reach', 'everything that can never finish while this is unfinished — long-term weight.'],
-      ['Immediate unlock', 'how many things become startable the moment this finishes — short-term payoff. Reach does NOT imply unlock (dependents may have other blockers), which is why the numbers stay separate.'],
+      ['Immediate unlock', 'how many things become startable the moment this finishes — short-term payoff. Reach does NOT imply unlock, which is why the numbers stay separate.'],
       ['Remaining depth', 'the longest chain of unfinished steps running through it — a schedule-length signal without time estimates.'],
-      ['Starvation: current stint', 'how long it has been continuously resource-blocked right now.'],
-      ['Starvation: cumulative credit', 'total time waited since it last held resources. It survives brief flips to ready, and boosts the recommendation score so long-starved work gets first claim on the unit that finally frees.'],
+    ],
+  },
+  starvation: {
+    title: 'Starvation',
+    purpose: 'Work that has been waiting on resources the longest. Long-starved work automatically accrues scoring credit, so it claims freed capacity first instead of being starved forever by newer, flashier items.',
+    how: [
+      'Use the list to spot chronic waiters — repeated long stints on the same items usually mean a capability is undersupplied (check Resource contention above).',
+      'No action is required for the credit itself; it is applied to the recommendation score automatically.',
+    ],
+    components: [
+      ['Current stint', 'how long the item has been continuously resource-blocked right now ("—" means it is not blocked at this moment).'],
+      ['Cumulative credit', 'total time waited since the item last held resources. It survives brief flips to ready, and boosts the recommendation score so long-starved work gets first claim on the unit that finally frees.'],
     ],
   },
   tree: {
@@ -134,14 +212,13 @@ export const HELP: Record<string, HelpTopic> = {
       ['Status dots', 'the same live statuses as everywhere else: green ready, amber resource-blocked, grey blocked, blue working, purple held, dim finished, red dropped.'],
     ],
   },
-  vocab: {
-    title: 'Vocabulary',
-    purpose: 'Your own words for the workspace: states, thing types, resource types, and capability tags. The engine has no built-in names — it only understands the five state behaviors below; everything else is your labels. Every entry must be declared before use, so a typo can never silently break matching.',
+  states: {
+    title: 'States',
+    purpose: 'Your names for work situations ("queued", "awaiting sign-off"). The engine has no built-in state names — it only understands the five behaviors below, and every rule in the tool reads only the behavior a state is bound to.',
     how: [
-      'Define as many states as you like; each binds to exactly ONE of the five behaviors. Rename and recolor freely — history never changes meaning, because everything references entries by stable id.',
-      'A state’s behavior is locked while anything is in that state (move the things out first); its name and color are always editable.',
-      'Deleting any entry is refused while something still references it — the error lists exactly what.',
-      'Declare metadata fields on thing types and resource types to get proper forms (text/number/date/choice) in the editors. They shape forms only; nothing is ever validated against them.',
+      'Define as many states as you like; each binds to exactly ONE behavior. Rename and recolor freely — history never changes meaning, because everything references states by stable id.',
+      'A state’s behavior is locked while anything is in that state (🔒 shows the count) — move the things out first; name and color stay editable.',
+      'Deleting a state is refused while something still references it — the error lists exactly what.',
     ],
     components: [
       ['pending', 'not started. Eligible for the ready board once its prerequisites are satisfied.'],
@@ -149,10 +226,46 @@ export const HELP: Record<string, HelpTopic> = {
       ['paused', 'deliberately on hold: holds NO resources, dependents stay blocked, excluded from ready lists.'],
       ['satisfied', 'done, successfully. Unblocks dependents and counts toward progress.'],
       ['abandoned', 'ended without success. Each dependency edge decides whether its dependent may proceed anyway (with a warning) or stays blocked.'],
-      ['Thing types', 'labels and colors for work items (task, review, deliverable…) — filtering and reporting only, no engine meaning.'],
-      ['Resource types', 'labels and colors for resources (person, room, tool…) — same: display only.'],
-      ['Capabilities', 'the tags that actually matter for matching: requirements ask for them, resources carry them. Capabilities decide who CAN do work; types just label it.'],
-      ['Metadata fields', 'per-type form declarations: key, label, input kind, choices, and a soft "required" hint. Purely form-driving.'],
+    ],
+  },
+  thingTypes: {
+    title: 'Thing types',
+    purpose: 'Labels and colors for work items (task, review, deliverable…). Types are for filtering and reporting only — the engine attaches no meaning to them. Their one superpower: declared metadata fields, which turn an item’s free-form metadata into a proper form.',
+    how: [
+      'Rename and recolor freely — things reference their type by stable id, so nothing breaks.',
+      'Declare metadata fields to give every item of this type real form inputs (text/number/date/choice) in its editor. Fields shape the form only; nothing is ever validated against them.',
+      'Deleting a type is refused while any thing still uses it.',
+    ],
+    components: [
+      ['Color', 'the chip color shown on cards, in the graph, and in the tree.'],
+      ['Metadata fields', 'per-type form declarations: key, label, input kind, choices for a choice list, and a soft "required" hint.'],
+    ],
+  },
+  resourceTypes: {
+    title: 'Resource types',
+    purpose: 'Labels and colors for resources (person, room, tool…) — the resource-side twin of thing types. Display and filtering only: a resource type never affects which work a resource can satisfy.',
+    how: [
+      'Use types to group the resource board visually and filter it; declare metadata fields to get proper form inputs in the resource editor.',
+      'What a resource can actually DO is decided by its capability tags, not its type — grant those on the resource board.',
+      'Deleting a resource type is refused while any resource still uses it.',
+    ],
+    components: [
+      ['Color', 'the chip color shown on the resource board.'],
+      ['Metadata fields', 'per-type form declarations for resource editors — form-driving only, never validated.'],
+      ['Type vs. capability', 'the type says what a resource IS (label); capabilities say what it CAN DO (matching).'],
+    ],
+  },
+  capabilities: {
+    title: 'Capabilities',
+    purpose: 'The tags that actually matter for matching: requirements ask for them, resources carry them. Capabilities decide who CAN do work — unlike types, which only label and color.',
+    how: [
+      'Keep tags meaningful and shared ("editing", "approval") — a requirement matches only resources that carry ALL its tags at once.',
+      'Tags must be declared here (or inline via "+ new capability…") before use, so a typo can never silently fail to match.',
+      'Grant and revoke tags on resources from the resource board; deleting a capability is refused while any requirement or resource still references it.',
+    ],
+    components: [
+      ['On a requirement', '"1× editing+approval" = one unit of something carrying both tags at once.'],
+      ['On a resource', 'the set of things it can do; a pool’s tags apply to every unit in it.'],
     ],
   },
   history: {
@@ -256,6 +369,19 @@ export const HELP: Record<string, HelpTopic> = {
       ['On a resource', 'the set of things it can do; a pool’s tags apply to every unit in it.'],
     ],
   },
+  dependency: {
+    title: 'Declaring a dependency',
+    purpose: 'A dependency says "this must FINISH before that can START" — the waiting item is blocked until the other is done. This is ordering between separate items; to put one item INSIDE another, set a parent in the item’s editor instead.',
+    how: [
+      'Either side may be a container: such an edge silently binds every current and future child inside it.',
+      'Pick the policy for the abandoned case before asserting — it can be changed later only by retracting and re-adding the edge.',
+      'Cycles are rejected outright, with the offending chain spelled out — work orders must stay acyclic.',
+    ],
+    components: [
+      ['ignore — unblock with a warning (default)', 'if the prerequisite is abandoned, the dependent may proceed anyway and carries a ⚠ badge so the tolerance stays visible.'],
+      ['block — stay blocked', 'an abandoned prerequisite keeps the dependent blocked until the work is redone or the edge is removed.'],
+    ],
+  },
   proposal: {
     title: 'Confirming an assignment',
     purpose: 'Starting work checks concrete resources out. The tool computes a feasible assignment — which resource satisfies which requirement — and shows it here; nothing is committed until you confirm.',
@@ -317,4 +443,8 @@ export const HELP: Record<string, HelpTopic> = {
       ['scarcity penalty', 'subtracted when it would occupy heavily contended resources — prefer work that does not hog what everyone needs, unless it is high-impact enough to win anyway.'],
     ],
   },
-};
+} satisfies Record<string, HelpTopic>;
+
+/** HelpKey is the closed set of topic names — a typo'd "?" wiring becomes a
+ * type error (under tsc; esbuild only strips) instead of a dead button. */
+export type HelpKey = keyof typeof HELP;

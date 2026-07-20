@@ -7,6 +7,7 @@ import { store } from '../store';
 import { badgeRow, projectName, reqChips, reqChipsOf, scoreBlock, starveNote, thingLink, typeChip } from '../ui/bits';
 import { openBulkAdd } from '../ui/bulkAdd';
 import { helpButton } from '../ui/help';
+import type { HelpKey } from '../ui/helpContent';
 import { openProjectEditor } from '../ui/projectEditor';
 import { projectSelect } from '../ui/projectSelect';
 import { openThingEditor } from '../ui/thingEditor';
@@ -90,7 +91,7 @@ export function renderReady(root: HTMLElement): void {
   });
   const nearStrip = h('section', { class: 'near-strip' },
     h('header', { class: 'col-head' },
-      h('h2', null, 'Almost ready'),
+      h('h2', null, 'Almost ready', helpButton('almostReady')),
       h('span', { class: 'count' }, String(near.length)),
       h('span', { class: 'muted tiny' }, ' — pending things a few blockers away'),
       h('span', { class: 'spacer' }),
@@ -107,17 +108,17 @@ export function renderReady(root: HTMLElement): void {
   const board = h('div', { class: 'board' },
     column('Ready', ready.length,
       ready.length === 0 ? readyEmptyState(leaves) : ready.map((e) => readyCard(e)),
-      'col-ready'),
+      'col-ready', 'readyList'),
     column('Resource-blocked', resBlocked.length,
       resBlocked.length === 0 ? emptyNote('Nothing is waiting on resources.')
-        : resBlocked.map((t) => thingCard(t, { showReqs: true })), 'col-rblocked'),
+        : resBlocked.map((t) => thingCard(t, { showReqs: true })), 'col-rblocked', 'resourceBlocked'),
     column('In progress', working.length + held.length,
       working.length + held.length === 0 ? emptyNote('Nothing is being worked right now.')
         : [...working.map((t) => thingCard(t, { showAllocs: true })),
-          ...held.map((t) => thingCard(t, { heldNote: true }))], 'col-working'),
+          ...held.map((t) => thingCard(t, { heldNote: true }))], 'col-working', 'inProgress'),
     column('Recently done', done.length,
       done.length === 0 ? emptyNote('Nothing finished yet.')
-        : done.map((t) => thingCard(t, {})), 'col-done'));
+        : done.map((t) => thingCard(t, {})), 'col-done', 'recentlyDone'));
 
   root.replaceChildren(toolbar, board, nearStrip);
 }
@@ -167,9 +168,11 @@ function rerenderColumnsOnly(root: HTMLElement): void {
   }
 }
 
-function column(title: string, count: number, content: HTMLElement | HTMLElement[], cls: string): HTMLElement {
+function column(title: string, count: number, content: HTMLElement | HTMLElement[], cls: string, help: HelpKey): HTMLElement {
   return h('section', { class: 'col ' + cls },
-    h('header', { class: 'col-head' }, h('h2', null, title), h('span', { class: 'count' }, String(count))),
+    h('header', { class: 'col-head' },
+      h('h2', null, title, helpButton(help)),
+      h('span', { class: 'count' }, String(count))),
     h('div', { class: 'col-body' }, content));
 }
 

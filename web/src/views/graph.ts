@@ -650,5 +650,5 @@ function askOnAbandoned(from: string, to: string, root: HTMLElement): void {
           }
         },
       }, 'Assert dependency')));
-  openModal('New dependency', body, { help: 'thingEditor' });
+  openModal('New dependency', body, { help: 'dependency' });
 }

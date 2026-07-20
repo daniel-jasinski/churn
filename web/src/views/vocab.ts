@@ -23,7 +23,7 @@ function occupiedCount(stateId: string): number {
 
 function statesCol(): HTMLElement {
   return h('section', { class: 'vocab-col' },
-    h('h2', null, 'States', helpButton('vocab')),
+    h('h2', null, 'States', helpButton('states')),
     h('p', { class: 'muted tiny' },
       'Your names for situations, each bound to one of five behaviors the engine acts on. The behavior is locked while any thing is in the state; name and color change freely.'),
     h('ul', { class: 'vocab-list' }, ...store.states.map((s) => {
@@ -76,7 +76,7 @@ function stateEditor(existing?: StateDef): void {
 
 function typesCol(): HTMLElement {
   return h('section', { class: 'vocab-col' },
-    h('h2', null, 'Thing types', helpButton('vocab')),
+    h('h2', null, 'Thing types', helpButton('thingTypes')),
     h('p', { class: 'muted tiny' }, 'Types carry no engine meaning — they drive filtering, coloring and reporting.'),
     h('ul', { class: 'vocab-list' }, ...store.types.map((t) => h('li', null,
       chip(t.name, t.color, 'chip-type'),
@@ -124,7 +124,7 @@ export function openTypeEditor(existing?: TypeDef, onSaved?: () => void): void {
 
 function resourceTypesCol(): HTMLElement {
   return h('section', { class: 'vocab-col' },
-    h('h2', null, 'Resource types', helpButton('vocab')),
+    h('h2', null, 'Resource types', helpButton('resourceTypes')),
     h('p', { class: 'muted tiny' },
       'Categorize resources (person, room, tool…) — display and filtering only; the engine matches on capabilities, never on type.'),
     h('ul', { class: 'vocab-list' }, ...store.resourceTypes.map((t) => h('li', null,
@@ -175,7 +175,7 @@ export function openResourceTypeEditor(existing?: ResourceType, onSaved?: (rt: R
 
 function capsCol(): HTMLElement {
   return h('section', { class: 'vocab-col' },
-    h('h2', null, 'Capabilities', helpButton('vocab')),
+    h('h2', null, 'Capabilities', helpButton('capabilities')),
     h('p', { class: 'muted tiny' },
       'Declared tags matched between requirements and resources — declared-before-use, so a typo can never silently break matching.'),
     h('ul', { class: 'vocab-list' }, ...store.capabilities.map((c) => h('li', null,

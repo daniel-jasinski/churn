@@ -4,6 +4,7 @@
 // back to the editor underneath instead of destroying it.
 
 import { h } from './dom';
+import type { HelpKey } from './ui/helpContent';
 
 const stack: HTMLElement[] = [];
 
@@ -20,12 +21,12 @@ export function closeModal(): void {
  * and returns the body element. `help` names a help topic: a "?" appears in
  * the title bar and opens the topic stacked over this dialog. The help
  * button is injected lazily (modalHelpButton) to avoid an import cycle. */
-export let modalHelpButton: ((topic: string) => HTMLElement) | null = null;
-export function setModalHelpButton(fn: (topic: string) => HTMLElement): void {
+export let modalHelpButton: ((topic: HelpKey) => HTMLElement) | null = null;
+export function setModalHelpButton(fn: (topic: HelpKey) => HTMLElement): void {
   modalHelpButton = fn;
 }
 
-export function openModal(title: string, content: HTMLElement, opts: { wide?: boolean; help?: string } = {}): HTMLElement {
+export function openModal(title: string, content: HTMLElement, opts: { wide?: boolean; help?: HelpKey } = {}): HTMLElement {
   const box = h('div', { class: 'modal' + (opts.wide ? ' modal-wide' : '') },
     h('div', { class: 'modal-head' },
       h('h3', null, title, opts.help && modalHelpButton ? modalHelpButton(opts.help) : null),

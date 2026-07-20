@@ -34,7 +34,7 @@ export function renderBottlenecks(root: HTMLElement): void {
 function contentionSection(b: Bottlenecks): HTMLElement {
   const c = b.contention;
   return h('section', { class: 'dash-sec' },
-    h('h2', null, 'Resource contention', helpButton('bottlenecks')),
+    h('h2', null, 'Resource contention', helpButton('contention')),
     h('div', { class: 'stat-row' },
       stat(String(c.unmet), 'unmet requirement units', 'trustworthy — computed by actually trying every assignment of demand onto free units', c.unmet > 0 ? 'stat-bad' : 'stat-ok'),
       stat(String(c.demand), 'units demanded', 'ready + frontier requirement units'),
@@ -90,7 +90,7 @@ function criticalitySection(b: Bottlenecks, root: HTMLElement): HTMLElement {
   const holder = h('section', { class: 'dash-sec' });
   const renderCrit = () => {
     holder.replaceChildren(
-      h('h2', null, 'Critical things', helpButton('bottlenecks')),
+      h('h2', null, 'Critical things', helpButton('criticality')),
       h('p', { class: 'muted tiny' },
         'Three separate structural numbers — reach does not mean immediate unblocking, so they are never summed. Click a column to rank by it.'),
       sorted.length === 0
@@ -117,7 +117,7 @@ function criticalitySection(b: Bottlenecks, root: HTMLElement): HTMLElement {
 
 function starvationSection(b: Bottlenecks): HTMLElement {
   return h('section', { class: 'dash-sec' },
-    h('h2', null, 'Starvation', helpButton('bottlenecks')),
+    h('h2', null, 'Starvation', helpButton('starvation')),
     h('p', { class: 'muted tiny' },
       'Things resource-blocked for a long uninterrupted stint. Credit is total time waited since the thing last held resources — it survives the flip to ready and boosts its recommendation score, so long-starved work gets first claim on freed capacity.'),
     b.starvation.length === 0
