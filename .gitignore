@@ -20,6 +20,9 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# Claude Code: launch.json (dev server config) is shared; local settings are not
+.claude/settings.local.json
+
 # Go test binaries
 *.test
 *.test.exe
