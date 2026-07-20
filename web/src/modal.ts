@@ -8,6 +8,14 @@ import type { HelpKey } from './ui/helpContent';
 
 const stack: HTMLElement[] = [];
 
+/** modalDepth reports how many overlays are open. Anything else that binds
+ * Escape at the document level checks this first: overlays handle Escape on
+ * themselves, but the event still bubbles, so without the check a dialog and
+ * the panel behind it would both close on one press. */
+export function modalDepth(): number {
+  return stack.length;
+}
+
 /** closeModal removes the topmost open modal and refocuses the one it
  * reveals — the Escape handler is per-overlay keydown, so without refocus
  * the revealed dialog would ignore Escape until clicked. */
@@ -36,7 +44,17 @@ export function openModal(title: string, content: HTMLElement, opts: { wide?: bo
     class: 'overlay',
     onclick: (e: MouseEvent) => { if (e.target === overlay) closeTop(); },
   }, box);
-  overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTop(); });
+  // Escape is consumed here, not merely handled: this listener pops the stack
+  // before the event reaches document, so a document-level Escape handler
+  // (the inspector) would look at an already-empty stack and close itself too
+  // — one press, two things dismissed. stopPropagation is what actually makes
+  // modalDepth() a usable guard for anyone listening further up.
+  overlay.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (stack[stack.length - 1] !== overlay) return;
+    e.stopPropagation();
+    closeModal();
+  });
   document.body.appendChild(overlay);
   stack.push(overlay);
   box.tabIndex = -1;

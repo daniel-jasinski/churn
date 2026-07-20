@@ -1,12 +1,19 @@
 // views/graph.ts — per-project DAG (§4.1): dagre left-to-right, nodes colored
 // by derived status, composites collapsible to rollup nodes with a progress
 // pie, hover cone highlight, click details panel, and dependency editing.
+//
+// The details panel is not the graph's own element: it is published to the
+// shared inspector (ui/inspector.ts), the one right-hand surface in the app.
+// The graph still builds and mutates it exactly as before — it just no
+// longer decides where it hangs, which is what lets a resource share the
+// same slot without the two ever stacking.
 
 import cytoscape from 'cytoscape';
 import cytoscapeDagre from 'cytoscape-dagre';
 import { api, Dependency, Graph, Thing } from '../api';
 import { h, select, statusDot } from '../dom';
 import { closeModal, openModal } from '../modal';
+import { setViewPanel } from '../ui/inspector';
 import { store } from '../store';
 import { showError, toast } from '../toast';
 import { asOfButton } from '../ui/asof';
@@ -40,11 +47,14 @@ interface ViewState {
   selected: { kind: 'thing' | 'dep'; id: string } | null;
   zoom?: number;
   pan?: { x: number; y: number };
+  // root is kept so the module-level Escape handler can redraw without
+  // capturing a render's arguments in a listener that outlives it.
+  root: HTMLElement | null;
 }
 
 const vs: ViewState = {
   project: null, collapsed: new Set(), collapsedInit: false,
-  drawFrom: null, drawing: false, drawPreTo: null, selected: null,
+  drawFrom: null, drawing: false, drawPreTo: null, selected: null, root: null,
 };
 let cy: ReturnType<typeof cytoscape> | null = null;
 let lastGraph: Graph | null = null;
@@ -52,6 +62,7 @@ let lastGraph: Graph | null = null;
 // The workbench resolves the project before it ever calls in, so the graph
 // takes a concrete id — there is no "no project selected" state left to draw.
 export function renderGraph(root: HTMLElement, projectId: string): void {
+  vs.root = root;
   if (vs.project !== projectId) {
     vs.project = projectId;
     vs.collapsed = new Set();
@@ -82,8 +93,11 @@ export function renderGraph(root: HTMLElement, projectId: string): void {
     helpButton('graph'));
 
   const canvas = h('div', { class: 'cy-canvas' + (vs.drawing ? ' drawing' : '') });
-  const panel = h('aside', { class: 'side-panel' });
-  root.replaceChildren(toolbar, h('div', { class: 'graph-wrap' }, canvas, panel));
+  // Published synchronously, before the graph payload arrives, so the
+  // inspector never blinks empty between renders.
+  const panel = h('div', { class: 'panel-host' });
+  setViewPanel(panel);
+  root.replaceChildren(toolbar, h('div', { class: 'graph-wrap' }, canvas));
 
   void loadAndDraw(canvas, panel, projectId, root);
 }
@@ -405,15 +419,23 @@ async function loadAndDraw(canvas: HTMLElement, panel: HTMLElement, projectId: s
     panel.replaceChildren(defaultPanel(g));
   }
 
-  document.onkeydown = (e) => {
-    if (e.key === 'Escape' && vs.drawing) {
-      vs.drawing = false;
-      vs.drawFrom = null;
-      vs.drawPreTo = null;
-      renderGraph(root, projectId);
-    }
-  };
 }
+
+// Escape cancels edge-drawing, and must do ONLY that: the inspector also
+// binds Escape on document, so without consuming the event here one press
+// would cancel the draw AND close the panel. Capture phase runs before the
+// inspector's bubble-phase listener, which is what makes stopPropagation
+// effective. Registered once at module scope — the previous per-render
+// `document.onkeydown =` left a listener holding a stale root and project id
+// alive after navigating away from the graph.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !vs.drawing || !vs.root || !vs.project) return;
+  e.stopPropagation();
+  vs.drawing = false;
+  vs.drawFrom = null;
+  vs.drawPreTo = null;
+  renderGraph(vs.root, vs.project);
+}, true);
 
 function cssEscape(s: string): string {
   return s.replace(/([^\w-])/g, '\\$1');

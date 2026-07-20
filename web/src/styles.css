@@ -135,6 +135,10 @@ body.asof .mut { display: none !important; }
   display: flex; align-items: center; gap: 7px;
   padding: 5px 8px; border-radius: 6px; color: var(--fg);
   border-left: 2px solid transparent;
+  /* resource rows are <button> (they open the inspector, they do not
+     navigate); strip the control chrome so both forms render identically */
+  width: 100%; font: inherit; text-align: left; cursor: pointer;
+  background: transparent; border-top: 0; border-right: 0; border-bottom: 0;
 }
 .side-item:hover { background: var(--bg3); text-decoration: none; }
 .side-item.active {
@@ -148,6 +152,35 @@ body.asof .mut { display: none !important; }
    the project name it belongs to. */
 .side-prog { height: 2px; margin: 0 8px 3px 10px; border-radius: 2px; background: var(--bg3); overflow: hidden; }
 .side-prog i { display: block; height: 100%; background: var(--st-ready); }
+
+/* inspector — the one detail surface, shared by the graph's node/edge panels
+   and the sidebar's resources. Hidden entirely when empty so views that
+   publish nothing get the full width. */
+.inspector {
+  display: none; flex: none; width: 320px; min-height: 0; overflow: auto;
+  background: var(--bg2); border-left: 1px solid var(--border);
+}
+.inspector.on { display: block; }
+.insp-head { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 6px; }
+.insp-title { flex: 1; font-size: 14px; line-height: 1.3; }
+.insp-detail { margin-top: 4px; }
+.insp-list { margin: 4px 0 0; padding-left: 18px; }
+.insp-list li { margin: 2px 0; }
+/* the graph's published panel: it supplies its own .panel-pad, so the host
+   is a bare passthrough rather than a second padded box */
+.panel-host { display: contents; }
+
+/* Below this the three columns stop fitting, so a pinned resource floats over
+   the view instead of squeezing it. Only .insp-resource floats: it is the one
+   panel with a × and an Escape binding. A view's own panel stays in flow —
+   floating it would cover the canvas with no way to dismiss it. */
+@media (max-width: 1180px) {
+  .inspector.on.insp-resource {
+    position: absolute; right: 0; top: 0; bottom: 0; z-index: 20;
+    box-shadow: var(--shadow); border-left: 1px solid var(--border);
+  }
+  .shell { position: relative; }
+}
 
 /* project workbench — header + tab strip around the three arrangements */
 .proj-shell { height: 100%; display: flex; flex-direction: column; min-height: 0; }
@@ -318,9 +351,8 @@ input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 /* graph view */
 /* flex, not calc(100vh - …): the workbench header made the old subtraction
    wrong, and any future chrome would have made it wrong again. */
-.graph-wrap { display: flex; gap: 10px; flex: 1; min-height: 320px; }
+.graph-wrap { display: flex; flex: 1; min-height: 320px; }
 .cy-canvas { flex: 1; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
-.side-panel { width: 320px; flex: none; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: auto; }
 .panel-pad { padding: 10px 12px; }
 .panel-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }
 .panel-actions { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
