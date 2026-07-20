@@ -15,8 +15,7 @@ import { renderResources } from './views/resources';
 import { renderSettings } from './views/settings';
 import { renderTree } from './views/tree';
 
-// The daily boards. Settings (weights + vocabulary) is deliberately absent:
-// it is configure-once, and rides the gear at the right instead.
+// The daily boards — the screens worth a permanent labelled slot.
 const NAV: [string, string, string][] = [
   ['ready', 'Ready', 'g r'],
   ['graph', 'Graph', 'g g'],
@@ -24,7 +23,14 @@ const NAV: [string, string, string][] = [
   ['resources', 'Resources', 'g s'],
   ['bottlenecks', 'Bottlenecks', 'g b'],
   ['tree', 'Tree', 'g t'],
-  ['history', 'History', 'g h'],
+];
+
+// Icon affordances at the right. History is reached far more often by
+// deep-link (every thing card links its own history) than by browsing the
+// whole log, and settings is configure-once — neither earns a nav tab.
+const ICONS: [string, string, string][] = [
+  ['history', '⟲', 'History — the full commit log (g h)'],
+  ['settings', '⚙', 'Settings — weights (g w), vocabulary (g v)'],
 ];
 
 const app = document.getElementById('app')!;
@@ -52,11 +58,13 @@ function renderTopbar(): void {
       ? h('span', { class: 'muted tiny', title: `workspace ${store.workspace.workspace_id}` },
         `seq ${store.workspace.last_seq}`)
       : null,
-    h('a', {
-      href: '#/settings',
-      class: 'gear' + (r.name === 'settings' ? ' active' : ''),
-      title: 'Settings — weights (g w), vocabulary (g v)',
-    }, '⚙'));
+    h('span', { class: 'topbar-icons' },
+      ...ICONS.map(([name, glyph, title]) =>
+        h('a', {
+          href: `#/${name}`,
+          class: 'icon-link' + (r.name === name ? ' active' : ''),
+          title,
+        }, glyph))));
 }
 
 function renderBanner(): void {

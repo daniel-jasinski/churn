@@ -71,12 +71,13 @@ code { font-family: ui-monospace, Consolas, monospace; }
 .live-on { color: var(--ok); }
 .live-off { color: var(--warn); }
 .spacer { flex: 1; }
-.gear {
+.topbar-icons { display: flex; gap: 2px; }
+.icon-link {
   padding: 2px 7px; border-radius: 6px; color: var(--muted);
   font-size: 15px; line-height: 1.4; text-decoration: none;
 }
-.gear:hover { background: var(--bg3); color: var(--fg); text-decoration: none; }
-.gear.active { background: var(--bg3); color: var(--fg); }
+.icon-link:hover { background: var(--bg3); color: var(--fg); text-decoration: none; }
+.icon-link.active { background: var(--bg3); color: var(--fg); }
 
 /* as-of banner */
 .asof-banner { display: none; }
