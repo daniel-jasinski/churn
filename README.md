@@ -68,30 +68,13 @@ projection rebuilt by replay (DESIGN.md §5.4).
 
 ## Development
 
-Gate (green before every commit):
-
-```
-go build ./... && go vet ./... && go test -race ./...
-```
-
-On Windows, `-race` needs cgo — a mingw-w64 gcc on PATH:
-
-```
-PATH="/c/dev/mingw64/bin:$PATH" CGO_ENABLED=1 go test -race ./...
-```
-
-Lint (config in `.golangci.yml` — govet, errcheck, staticcheck, unused,
-ineffassign, misspell, plus exhaustive scoped to the closed-set switches of
-`internal/domain` and `internal/event`):
-
-```
-golangci-lint run ./...
-```
-
-Frontend: `web/dist/` is committed and embedded, so `go build` needs no
-Node toolchain. To change the UI, rebuild `dist/` and commit it together
-with the source change — see [web/README.md](web/README.md); a freshness
-test fails the gate if a `web/src` change ships without a rebuild.
+Contributor and agent guidance — the quality gate, commit conventions, and
+the architectural patterns to preserve — lives in [AGENTS.md](AGENTS.md).
+In short: `scripts/gate.sh` (gofmt, build, vet, race tests, lint) must be
+green before every commit, and any `web/src` change must ship with a
+rebuilt, committed `web/dist/` (a freshness test enforces this). The lint
+config is `.golangci.yml`; on Windows the race detector needs a mingw-w64
+gcc on PATH, which `scripts/gate.sh` handles.
 
 ### Scripts
 
