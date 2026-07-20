@@ -42,7 +42,7 @@ app.replaceChildren(topbar, banner, view);
 function renderTopbar(): void {
   const r = current();
   topbar.replaceChildren(
-    h('span', { class: 'brand' }, 'churn'),
+    h('span', { class: 'brand' }, h('span', { class: 'brand-text' }, 'churn')),
     h('nav', null, ...NAV.map(([name, label, key]) =>
       h('a', {
         href: `#/${name}`,

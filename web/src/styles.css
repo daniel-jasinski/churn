@@ -62,7 +62,31 @@ code { font-family: ui-monospace, Consolas, monospace; }
   display: flex; align-items: center; gap: 12px;
   padding: 6px 12px; background: var(--bg2); border-bottom: 1px solid var(--border);
 }
-.brand { font-weight: 700; letter-spacing: 0.02em; }
+/* Brand. The mark is a three-node dependency graph — one thing finishing
+   unlocks two others, which is the whole app in one glyph. It rides on a
+   ::before so no markup is built in JS (see AGENTS.md: the h() builder emits
+   text nodes only, and it cannot create SVG namespaced elements anyway).
+   The wordmark gradient runs accent → ready, the same two colors as the mark. */
+.brand {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-weight: 800; font-size: 15px; letter-spacing: 0.13em; text-transform: uppercase;
+}
+.brand::before {
+  content: ''; flex: none; width: 19px; height: 19px;
+  background: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M6.5%2012L17%206.5M6.5%2012L17%2017.5'%20stroke='%238ea2c0'%20stroke-width='1.9'%20stroke-linecap='round'/%3E%3Ccircle%20cx='6.5'%20cy='12'%20r='3.3'%20fill='%233b82f6'/%3E%3Ccircle%20cx='17.5'%20cy='6'%20r='2.7'%20fill='%2322c55e'/%3E%3Ccircle%20cx='17.5'%20cy='18'%20r='2.7'%20fill='%2322c55e'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+/* padding-right: the trailing letter-spacing would otherwise clip the N
+   against the background-clip box */
+.brand-text {
+  background: linear-gradient(95deg, var(--accent), var(--st-ready));
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent; padding-right: 0.13em;
+}
+/* transparent text with a clipped background is invisible if the clip fails —
+   fall back to a flat accent rather than a blank topbar */
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .brand-text { background: none; color: var(--accent); }
+}
 .topbar nav { display: flex; gap: 2px; }
 .topbar nav a { padding: 4px 9px; border-radius: 6px; color: var(--fg); }
 .topbar nav a.active { background: var(--bg3); font-weight: 600; }
