@@ -1,6 +1,10 @@
 package store
 
-import "errors"
+import (
+	"errors"
+	"os"
+	"path/filepath"
+)
 
 // ErrLocked is returned by Open when another process holds the data
 // directory's churn.lock.
@@ -19,4 +23,30 @@ type dirLock struct {
 // implicitly.
 func (l *dirLock) release() error {
 	return closeLockHandle(l.handle)
+}
+
+// InUse reports whether another process currently holds dir's lock — that is,
+// whether a churn server or import is live in it.
+//
+// This is a DIAGNOSTIC probe, not a gate: it takes the lock and immediately
+// releases it, so the answer is a snapshot that may be stale by the time the
+// caller acts on it. Callers must still handle ErrLocked from Open; the point
+// of InUse is to tell an operator *why* a directory looks the way it does
+// before anything is opened. It creates the lock file if absent, but nothing
+// else, and a missing directory is simply not in use.
+func InUse(dir string) (bool, error) {
+	if _, err := os.Stat(dir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	lock, err := acquireDirLock(filepath.Join(dir, LockFileName))
+	if errors.Is(err, ErrLocked) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return false, lock.release()
 }

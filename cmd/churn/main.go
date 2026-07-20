@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"churn/internal/store"
 )
@@ -51,9 +52,35 @@ The workspace directory defaults to the current directory; override it with
 Run 'churn <command> -h' for command flags.
 `
 
+// shutdownSignals trigger a graceful shutdown. SIGTERM matters as much as
+// SIGINT: it is what `docker stop`, systemd, and a plain `kill` send, and
+// without it serve dies on the default disposition — no drain, no writer
+// stop, no clean database close. (Windows never delivers it; asking is
+// harmless there.)
+var shutdownSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
+
+// watchSecondSignal turns a second shutdown signal into an immediate exit.
+// The first starts a drain that is bounded but not instant, and an operator
+// who signals again means "now" — without this the repeat is swallowed,
+// because signal.NotifyContext keeps its handler installed after firing and
+// the default kill-the-process disposition never comes back. The channel is
+// registered up front rather than after the first signal, so a fast double
+// Ctrl-C cannot slip through the gap.
+func watchSecondSignal(stderr io.Writer) {
+	ch := make(chan os.Signal, 2)
+	signal.Notify(ch, shutdownSignals...)
+	go func() {
+		<-ch // the one that started the graceful shutdown
+		<-ch
+		fmt.Fprintln(stderr, "churn: second signal: exiting immediately")
+		os.Exit(130) // 128 + SIGINT, the shell convention for signal death
+	}()
+}
+
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), shutdownSignals...)
 	defer stop()
+	watchSecondSignal(os.Stderr)
 	if err := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(0)
@@ -199,10 +226,11 @@ func resolveDataDir(flagVal string) string {
 }
 
 // openWorkspace opens the data directory exclusively (lock, schema), mapping
-// ErrLocked to an operator-readable message. Only serve (which may create a
-// fresh workspace) and import-log (which restores into an empty directory)
-// create files; maintenance commands pre-check with requireWorkspace so a
-// typo'd --data path errors instead of minting an empty workspace.
+// ErrLocked to an operator-readable message. Only serve --init (see
+// checkServeDataDir) and import-log (which restores into an empty directory)
+// create files; every other path pre-checks with requireWorkspace or
+// checkServeDataDir, so a typo'd --data errors instead of minting an empty
+// workspace.
 func openWorkspace(dir string) (*store.Store, error) {
 	st, err := store.Open(dir)
 	if errors.Is(err, store.ErrLocked) {
@@ -210,6 +238,57 @@ func openWorkspace(dir string) (*store.Store, error) {
 			dir, store.LockFileName)
 	}
 	return st, err
+}
+
+// checkServeDataDir applies serve's workspace-creation policy to dir and
+// reports whether serve is about to create one.
+//
+// Creating a workspace is explicit: without --init, an absent or empty
+// directory is an error. --data defaults to the current directory, so the
+// permissive alternative turns a typo'd path — or simply the wrong working
+// directory — into a brand-new empty workspace that is indistinguishable
+// from having lost the real one. Failing loudly costs one flag and removes
+// that whole class of scare.
+//
+// A leftover restore staging file refuses outright, --init or not: it means
+// an import-log was interrupted, and opening (or creating) a workspace
+// beside it would quietly paper over the wreckage of a restore the operator
+// believes succeeded, possibly after the JSONL source is already gone.
+func checkServeDataDir(dir string, init bool, stderr io.Writer) (creating bool, err error) {
+	partial := filepath.Join(dir, store.RestoreDBFileName)
+	if _, err := os.Stat(partial); err == nil {
+		// A restore that is RUNNING right now looks identical on disk to one
+		// that was interrupted — both hold this file. Only the directory lock
+		// tells them apart, so ask before diagnosing: telling an operator to
+		// delete the database of a live import would cause exactly the data
+		// loss this guard exists to prevent.
+		inUse, uerr := store.InUse(dir)
+		if uerr != nil {
+			return false, fmt.Errorf("checking %s: %w", dir, uerr)
+		}
+		if inUse {
+			return false, fmt.Errorf("data directory %s is in use by another churn process (%s is held)",
+				dir, store.LockFileName)
+		}
+		return false, fmt.Errorf("%s is a partial restore left by an interrupted import-log; "+
+			"re-run the import into an empty directory, or delete the file if the restore is not wanted", partial)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, fmt.Errorf("checking %s: %w", partial, err)
+	}
+
+	db := filepath.Join(dir, store.DBFileName)
+	switch _, err := os.Stat(db); {
+	case err == nil:
+		if init {
+			fmt.Fprintf(stderr, "churn: --init ignored: %s already contains a workspace\n", dir)
+		}
+		return false, nil
+	case !errors.Is(err, os.ErrNotExist):
+		return false, fmt.Errorf("checking %s: %w", db, err)
+	case !init:
+		return false, fmt.Errorf("no workspace at %s (is --data right? pass --init to create one here)", db)
+	}
+	return true, nil
 }
 
 // requireWorkspace fails unless dir already contains a workspace database.

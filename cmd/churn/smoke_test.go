@@ -40,7 +40,7 @@ func TestSmokeFullBinary(t *testing.T) {
 	if err := os.MkdirAll(data, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	srv := exec.Command(bin, "serve", "--data", data, "--listen", "127.0.0.1:0", "--actor", "smoke", "--no-open")
+	srv := exec.Command(bin, "serve", "--data", data, "--init", "--listen", "127.0.0.1:0", "--actor", "smoke", "--no-open")
 	stdout, err := srv.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)

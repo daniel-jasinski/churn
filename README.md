@@ -25,15 +25,21 @@ embedded, with no CDN and no network dependency, ever.
 
 The workspace directory is `--data`, or the `CHURN_DATA` environment
 variable, or the current directory — in that order. So inside a workspace
-you can just run `churn serve`. It is created on first `serve`. The port is
-`--port`, or `CHURN_PORT`, or a default of `24876`; `--listen host:port`
-gives full control of the bind address.
+you can just run `churn serve`. Creating one is explicit: `serve --init`
+makes a workspace where there is none, and a plain `serve` on a directory
+without one fails rather than mint an empty workspace out of a mistyped
+`--data`. The port is `--port`, or `CHURN_PORT`, or a default of `24876`;
+`--listen host:port` gives full control of the bind address.
+
+`serve` shuts down gracefully on SIGINT or SIGTERM: it ends the SSE
+streams, drains in-flight requests (up to 5s), stops the writer, and closes
+the database. Signal a second time to exit immediately.
 
 ## CLI
 
 | command | what it does |
 |---|---|
-| `churn serve [--data <dir>] [--port <n>] [--listen <addr>] [--actor <name>] [--no-open] [--verbose]` | run the workspace server (lock, replay, writer, HTTP API + UI) and open the UI |
+| `churn serve [--data <dir>] [--init] [--port <n>] [--listen <addr>] [--actor <name>] [--no-open] [--verbose]` | run the workspace server (lock, replay, writer, HTTP API + UI) and open the UI; `--init` creates the workspace if there is none |
 | `churn ls [projects\|things\|resources] [--data <dir>] [--project <id>] [--json]` | list workspace contents as a table (or `--json`) from the terminal |
 | `churn export-log [--data <dir>] [file]` | stream the event log as canonical JSONL (works against a live server; `-`/omitted = stdout) |
 | `churn import-log [--data <dir>] <file\|->` | restore a JSONL log into an **empty** data directory, re-validating every batch |

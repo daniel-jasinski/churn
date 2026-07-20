@@ -40,10 +40,19 @@ func (s *syncBuf) String() string {
 }
 
 // runCLI invokes the command in-process, capturing stdout and stderr.
+//
+// The context is bounded rather than Background so that a regression fails
+// loudly instead of hanging: the serve tests pin guards that must reject
+// before the server starts, and an unbounded context would let a broken guard
+// run serve forever — blocking until the package timeout and taking every
+// other test in the package down with it. No legitimate runCLI command comes
+// close to this budget.
 func runCLI(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
 	var out, errOut bytes.Buffer
-	err := run(context.Background(), args, strings.NewReader(""), &out, &errOut)
+	err := run(ctx, args, strings.NewReader(""), &out, &errOut)
 	return out.String(), errOut.String(), err
 }
 

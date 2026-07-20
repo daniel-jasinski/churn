@@ -26,10 +26,13 @@ import (
 // cmdServe opens the workspace (lock, replay, writer) and serves the HTTP
 // API (§5.1) until ctx is cancelled. The actor stamped on every write comes
 // from --actor (default: OS username) — phase 3 replaces this with
-// server-side sessions (§6). Shutdown is graceful: SSE streams are ended,
-// then in-flight requests drain (up to 5s).
-func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs, data := newFlagSet("serve", "serve [--data <dir>] [--port <n>] [--listen <addr>] [--actor <name>] [--no-open] [--verbose]", stderr)
+// server-side sessions (§6). Creating a workspace requires --init; see
+// checkServeDataDir for why. Shutdown is graceful: SSE streams are ended,
+// then in-flight requests drain (up to shutdownGrace), then the writer stops
+// and the database closes.
+func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) (err error) {
+	fs, data := newFlagSet("serve", "serve [--data <dir>] [--init] [--port <n>] [--listen <addr>] [--actor <name>] [--no-open] [--verbose]", stderr)
+	initWS := fs.Bool("init", false, "create the workspace if the data directory has none")
 	port := fs.Int("port", defaultPort, "port to listen on (env CHURN_PORT)")
 	listen := fs.String("listen", "", "full listen address host:port (advanced; overrides --port)")
 	actor := fs.String("actor", "", "actor stamped on every write (default: OS username)")
@@ -48,17 +51,33 @@ func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	if err != nil {
 		return err
 	}
+	creating, err := checkServeDataDir(dir, *initWS, stderr)
+	if err != nil {
+		return err
+	}
 
 	st, err := openWorkspace(dir)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = st.Close() }()
+	// Closing the database is where a failed WAL checkpoint surfaces, so the
+	// error is reported rather than swallowed — but never over an error that
+	// already went wrong earlier, which is the more useful one.
+	defer func() {
+		if cerr := st.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("closing workspace: %w", cerr)
+		}
+	}()
 	w, err := writer.Open(st, writer.Options{Actor: *actor})
 	if err != nil {
 		return err
 	}
+	// Deferred after the store's, so it runs BEFORE it: the writer must stop
+	// before the database it writes to goes away.
 	defer w.Close()
+	if creating {
+		fmt.Fprintf(stdout, "churn: created a new workspace in %s\n", dir)
+	}
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -81,18 +100,38 @@ func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	}
 	select {
 	case <-ctx.Done():
+		fmt.Fprintln(stdout, "churn: shutting down (signal again to exit immediately)")
 		api.Shutdown() // end SSE streams so the drain below can complete
-		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 		defer cancel()
-		if err := srv.Shutdown(shutCtx); err != nil {
-			return fmt.Errorf("shutdown: %w", err)
-		}
+		serr := srv.Shutdown(shutCtx)
+		// Shutdown closes the listeners before it starts draining, so Serve
+		// has already returned whether the drain finished or timed out;
+		// collect it unconditionally instead of leaving its result dropped.
+		//
+		// On the timeout path handlers are still running, and the deferred
+		// closes below do pull the database out from under them — they fail
+		// with "database is closed" toward clients that, by definition of the
+		// timeout, are no longer waiting. The log cannot tear: writer.Close
+		// waits for the batch in progress and every later Submit is rejected,
+		// so a wedged request delays the exit but never corrupts anything.
 		<-errc // http.ErrServerClosed
+		if serr != nil {
+			return fmt.Errorf("shutdown: %w (in-flight requests did not finish within %s)", serr, shutdownGrace)
+		}
 		return nil
 	case err := <-errc:
+		api.Shutdown() // the listener died; release the SSE streams too
 		return fmt.Errorf("serve: %w", err)
 	}
 }
+
+// shutdownGrace bounds the post-signal drain of in-flight requests. Every
+// churn handler is an in-memory computation over the projection measured in
+// single-digit milliseconds (README performance envelope), so this is orders
+// of magnitude more than a healthy drain needs — it exists to cap a wedged
+// one, not to accommodate slow work.
+const shutdownGrace = 5 * time.Second
 
 // defaultPort is the serve port when neither --port nor CHURN_PORT is set. It
 // deliberately avoids 8080 (which many dev tools grab) and sits below the
