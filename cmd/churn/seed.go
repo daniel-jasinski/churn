@@ -27,14 +27,11 @@ import (
 // over the three weeks before "now" (the writer's clock is injected), so
 // stint durations and history read like a lived-in workspace.
 func cmdSeedDemo(args []string, stdout, stderr io.Writer) error {
-	fs2, data := newFlagSet("seed-demo", "seed-demo --data <dir>", stderr)
+	fs2, data := newFlagSet("seed-demo", "seed-demo [--data <dir>]", stderr)
 	if err := fs2.Parse(args); err != nil {
 		return err
 	}
-	dir, err := requireData(*data)
-	if err != nil {
-		return err
-	}
+	dir := resolveDataDir(*data)
 	// A demo must never land on top of real data: only a missing or empty
 	// directory is accepted (same posture as import-log).
 	if entries, err := os.ReadDir(dir); err == nil {

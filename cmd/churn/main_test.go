@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -94,10 +95,75 @@ func buildWorkspace(t *testing.T, dir string) int {
 	return n
 }
 
-func TestMissingDataFlag(t *testing.T) {
-	for _, cmd := range []string{"serve", "export-log", "import-log", "backup", "reindex"} {
-		if _, _, err := runCLI(t, cmd); err == nil || !strings.Contains(err.Error(), "--data") {
-			t.Errorf("%s without --data: got %v, want an error naming --data", cmd, err)
+// TestDataDirResolution pins the --data > CHURN_DATA > cwd precedence.
+func TestDataDirResolution(t *testing.T) {
+	t.Setenv("CHURN_DATA", "")
+	if got := resolveDataDir("explicit"); got != "explicit" {
+		t.Errorf("flag should win: got %q", got)
+	}
+	if got := resolveDataDir(""); got != "." {
+		t.Errorf("no flag/env should default to cwd: got %q", got)
+	}
+	t.Setenv("CHURN_DATA", "from-env")
+	if got := resolveDataDir(""); got != "from-env" {
+		t.Errorf("CHURN_DATA should be used when --data is empty: got %q", got)
+	}
+	if got := resolveDataDir("flag"); got != "flag" {
+		t.Errorf("flag should beat env: got %q", got)
+	}
+}
+
+// TestChurnDataEnvHonored: with no --data, a maintenance command resolves the
+// workspace from CHURN_DATA and still fails closed on a missing one, naming it.
+func TestChurnDataEnvHonored(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "via-env")
+	t.Setenv("CHURN_DATA", missing)
+	_, _, err := runCLI(t, "reindex") // no --data
+	if err == nil || !strings.Contains(err.Error(), "no workspace database") {
+		t.Fatalf("reindex via CHURN_DATA on a missing workspace: got %v", err)
+	}
+	if !strings.Contains(err.Error(), missing) {
+		t.Fatalf("error should name the env-provided path %q: %v", missing, err)
+	}
+}
+
+// TestResolveListenAddr pins the serve address rules: --listen wins outright,
+// otherwise --port beats CHURN_PORT beats the default, bound to loopback.
+func TestResolveListenAddr(t *testing.T) {
+	want := fmt.Sprintf("127.0.0.1:%d", defaultPort)
+	t.Setenv("CHURN_PORT", "")
+	if a, err := resolveListenAddr("", defaultPort, false); err != nil || a != want {
+		t.Fatalf("default: %q %v, want %q", a, err, want)
+	}
+	if a, _ := resolveListenAddr("0.0.0.0:9000", defaultPort, true); a != "0.0.0.0:9000" {
+		t.Fatalf("--listen should win verbatim: %q", a)
+	}
+	t.Setenv("CHURN_PORT", "7000")
+	if a, _ := resolveListenAddr("", 5555, true); a != "127.0.0.1:5555" {
+		t.Fatalf("--port should beat env: %q", a)
+	}
+	if a, _ := resolveListenAddr("", defaultPort, false); a != "127.0.0.1:7000" {
+		t.Fatalf("CHURN_PORT should be used when --port is unset: %q", a)
+	}
+	t.Setenv("CHURN_PORT", "nope")
+	if _, err := resolveListenAddr("", defaultPort, false); err == nil {
+		t.Fatal("a non-numeric CHURN_PORT must error")
+	}
+	t.Setenv("CHURN_PORT", "")
+	if _, err := resolveListenAddr("", 70000, true); err == nil {
+		t.Fatal("an out-of-range port must error")
+	}
+}
+
+// TestVersionCommand: version / --version / -v all print a build line.
+func TestVersionCommand(t *testing.T) {
+	for _, arg := range []string{"version", "--version", "-v"} {
+		out, _, err := runCLI(t, arg)
+		if err != nil {
+			t.Fatalf("%s: %v", arg, err)
+		}
+		if !strings.HasPrefix(out, "churn ") || !strings.Contains(out, runtime.GOOS) {
+			t.Fatalf("%s output: %q", arg, out)
 		}
 	}
 }
@@ -256,7 +322,7 @@ func TestReindexAndServeRefuseHeldWorkspace(t *testing.T) {
 		!strings.Contains(err.Error(), "in use by another churn process") {
 		t.Fatalf("reindex on a held workspace: got %v", err)
 	}
-	if _, _, err := runCLI(t, "serve", "--data", dir, "--listen", "127.0.0.1:0"); err == nil ||
+	if _, _, err := runCLI(t, "serve", "--data", dir, "--listen", "127.0.0.1:0", "--no-open"); err == nil ||
 		!strings.Contains(err.Error(), "in use by another churn process") {
 		t.Fatalf("serve on a held workspace: got %v", err)
 	}
@@ -282,7 +348,7 @@ func TestServeHealthEndpoint(t *testing.T) {
 	errOut := &syncBuf{}
 	done := make(chan error, 1)
 	go func() {
-		done <- run(ctx, []string{"serve", "--data", dir, "--listen", "127.0.0.1:0"},
+		done <- run(ctx, []string{"serve", "--data", dir, "--listen", "127.0.0.1:0", "--no-open"},
 			strings.NewReader(""), out, errOut)
 	}()
 

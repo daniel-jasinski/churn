@@ -1,6 +1,6 @@
 // Command churn is the work dependency & resource tracker (DESIGN.md).
 //
-// One binary, six subcommands:
+// One binary, seven subcommands:
 //
 //	serve       run the workspace server (lock, replay, writer, HTTP API)
 //	export-log  stream the event log as canonical JSONL (§5.4)
@@ -8,6 +8,11 @@
 //	backup      write an online, transactionally consistent snapshot
 //	reindex     rebuild the derived event_refs table
 //	seed-demo   create a demo workspace in an empty data directory
+//	version     print version and build information
+//
+// The workspace directory is the --data flag, or the CHURN_DATA environment
+// variable, or the current directory — in that order, so a bare `churn serve`
+// runs against the directory you are in.
 //
 // The command layer is deliberately thin: all real logic lives in the
 // internal packages (store, writer, interchange, server); main wires flags,
@@ -36,6 +41,10 @@ commands:
   backup      write a consistent online snapshot of the workspace database
   reindex     rebuild the derived event_refs table
   seed-demo   create a demo workspace in an empty data directory
+  version     print version and build information
+
+The workspace directory defaults to the current directory; override it with
+--data or the CHURN_DATA environment variable.
 
 Run 'churn <command> -h' for command flags.
 `
@@ -73,6 +82,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return cmdReindex(rest, stdout, stderr)
 	case "seed-demo":
 		return cmdSeedDemo(rest, stdout, stderr)
+	case "version", "--version", "-v":
+		fmt.Fprintln(stdout, versionString())
+		return nil
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usageText)
 		return nil
@@ -91,16 +103,22 @@ func newFlagSet(name, synopsis string, stderr io.Writer) (*flag.FlagSet, *string
 		fmt.Fprintf(stderr, "usage: churn %s\n\n", synopsis)
 		fs.PrintDefaults()
 	}
-	data := fs.String("data", "", "workspace data directory (required)")
+	data := fs.String("data", "", "workspace data directory (default: current directory; env CHURN_DATA)")
 	return fs, data
 }
 
-// requireData enforces the mandatory --data flag.
-func requireData(data string) (string, error) {
-	if data == "" {
-		return "", errors.New("the --data flag is required (workspace data directory)")
+// resolveDataDir picks the workspace directory: the --data flag if given,
+// else the CHURN_DATA environment variable, else the current directory. So a
+// bare command runs against the directory you are in, and CHURN_DATA lets you
+// set it once per shell.
+func resolveDataDir(flagVal string) string {
+	if flagVal != "" {
+		return flagVal
 	}
-	return data, nil
+	if env := os.Getenv("CHURN_DATA"); env != "" {
+		return env
+	}
+	return "."
 }
 
 // openWorkspace opens the data directory exclusively (lock, schema), mapping

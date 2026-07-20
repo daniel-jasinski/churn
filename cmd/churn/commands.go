@@ -4,12 +4,16 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/user"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,19 +29,24 @@ import (
 // server-side sessions (§6). Shutdown is graceful: SSE streams are ended,
 // then in-flight requests drain (up to 5s).
 func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs, data := newFlagSet("serve", "serve --data <dir> [--listen <addr>] [--actor <name>] [--verbose]", stderr)
-	listen := fs.String("listen", "127.0.0.1:8080", "address to listen on")
+	fs, data := newFlagSet("serve", "serve [--data <dir>] [--port <n>] [--listen <addr>] [--actor <name>] [--no-open] [--verbose]", stderr)
+	port := fs.Int("port", defaultPort, "port to listen on (env CHURN_PORT)")
+	listen := fs.String("listen", "", "full listen address host:port (advanced; overrides --port)")
 	actor := fs.String("actor", "", "actor stamped on every write (default: OS username)")
+	noOpen := fs.Bool("no-open", false, "do not open the UI in a browser on start")
 	verbose := fs.Bool("verbose", false, "log every request (method, path, status, duration) to stderr")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	dir, err := requireData(*data)
-	if err != nil {
-		return err
-	}
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	dir := resolveDataDir(*data)
 	if *actor == "" {
 		*actor = defaultActor()
+	}
+	addr, err := resolveListenAddr(*listen, *port, set["port"])
+	if err != nil {
+		return err
 	}
 
 	st, err := openWorkspace(dir)
@@ -51,12 +60,13 @@ func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	}
 	defer w.Close()
 
-	ln, err := net.Listen("tcp", *listen)
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("listening on %s: %w", *listen, err)
+		return fmt.Errorf("listening on %s: %w (is the port already in use? set --port or CHURN_PORT)", addr, err)
 	}
-	fmt.Fprintf(stdout, "churn: workspace %s: listening on http://%s\n",
-		w.Projection().WorkspaceID, ln.Addr())
+	url := fmt.Sprintf("http://%s", ln.Addr())
+	fmt.Fprintf(stdout, "churn: workspace %s: listening on %s\n",
+		w.Projection().WorkspaceID, url)
 	fmt.Fprintf(stdout, "churn: acting as %s\n", *actor)
 
 	api := server.New(w, st, server.Options{
@@ -65,6 +75,10 @@ func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	srv := &http.Server{Handler: api.Handler()}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
+	if !*noOpen {
+		fmt.Fprintln(stdout, "churn: opening the UI in your browser (--no-open to disable)")
+		openBrowser(url)
+	}
 	select {
 	case <-ctx.Done():
 		api.Shutdown() // end SSE streams so the drain below can complete
@@ -78,6 +92,54 @@ func cmdServe(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	case err := <-errc:
 		return fmt.Errorf("serve: %w", err)
 	}
+}
+
+// defaultPort is the serve port when neither --port nor CHURN_PORT is set. It
+// deliberately avoids 8080 (which many dev tools grab) and sits below the
+// Linux ephemeral range, so it rarely collides; 24876 also spells "CHURN" on a
+// phone keypad, which makes the URL easy to remember.
+const defaultPort = 24876
+
+// resolveListenAddr builds the serve bind address. --listen wins outright —
+// full host:port control, e.g. 0.0.0.0:9000 to bind every interface.
+// Otherwise the port comes from --port when set, else CHURN_PORT, else the
+// default, bound to loopback. portSet reports whether --port was passed, so an
+// explicit flag beats the environment.
+func resolveListenAddr(listen string, port int, portSet bool) (string, error) {
+	if listen != "" {
+		return listen, nil
+	}
+	p := port
+	if !portSet {
+		if env := os.Getenv("CHURN_PORT"); env != "" {
+			v, err := strconv.Atoi(env)
+			if err != nil {
+				return "", fmt.Errorf("CHURN_PORT %q is not a number", env)
+			}
+			p = v
+		}
+	}
+	if p < 0 || p > 65535 {
+		return "", fmt.Errorf("port %d is out of range (0–65535)", p)
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(p)), nil
+}
+
+// openBrowser best-effort launches the default browser at url. Failures are
+// ignored: a headless machine simply has no launcher, and serve keeps running
+// regardless (the address is always printed).
+func openBrowser(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		// The empty title arg stops `start` treating the URL as a window title.
+		cmd = exec.Command("cmd", "/c", "start", "", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	_ = cmd.Start()
 }
 
 // defaultActor is the fallback --actor value: the OS username (domain
@@ -106,10 +168,7 @@ func cmdExportLog(args []string, stdout, stderr io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	dir, err := requireData(*data)
-	if err != nil {
-		return err
-	}
+	dir := resolveDataDir(*data)
 
 	st, err := store.OpenReadOnly(dir)
 	if err != nil {
@@ -145,14 +204,11 @@ func cmdExportLog(args []string, stdout, stderr io.Writer) error {
 // empty data directory. All-or-nothing: any envelope-hygiene or domain
 // validation failure aborts with a line-numbered error and nothing written.
 func cmdImportLog(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
-	fs, data := newFlagSet("import-log", "import-log --data <dir> <file|->", stderr)
+	fs, data := newFlagSet("import-log", "import-log [--data <dir>] <file|->", stderr)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	dir, err := requireData(*data)
-	if err != nil {
-		return err
-	}
+	dir := resolveDataDir(*data)
 	if fs.NArg() != 1 {
 		return errors.New("import-log needs exactly one argument: the JSONL file, or - for stdin")
 	}
@@ -178,14 +234,11 @@ func cmdImportLog(args []string, stdin io.Reader, stdout, stderr io.Writer) erro
 // workspace database. Like export-log it opens read-only without the lock,
 // so it works while a server is running.
 func cmdBackup(args []string, stdout, stderr io.Writer) error {
-	fs, data := newFlagSet("backup", "backup --data <dir> <dest.db>", stderr)
+	fs, data := newFlagSet("backup", "backup [--data <dir>] <dest.db>", stderr)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	dir, err := requireData(*data)
-	if err != nil {
-		return err
-	}
+	dir := resolveDataDir(*data)
 	if fs.NArg() != 1 {
 		return errors.New("backup needs exactly one argument: the destination database file")
 	}
@@ -207,14 +260,11 @@ func cmdBackup(args []string, stdout, stderr io.Writer) error {
 // process holds the workspace lock — and requires an existing workspace: a
 // typo'd --data must error, not mint an empty one.
 func cmdReindex(args []string, stdout, stderr io.Writer) error {
-	fs, data := newFlagSet("reindex", "reindex --data <dir>", stderr)
+	fs, data := newFlagSet("reindex", "reindex [--data <dir>]", stderr)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	dir, err := requireData(*data)
-	if err != nil {
-		return err
-	}
+	dir := resolveDataDir(*data)
 	if err := requireWorkspace(dir); err != nil {
 		return err
 	}

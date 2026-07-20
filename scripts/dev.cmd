@@ -18,6 +18,8 @@ if not exist workspace (
   echo ==^> reusing existing .\workspace
 )
 
+REM --no-open: the dev workflow manages its own browser tab; drop the flag to
+REM have serve launch one. Pinned to :8080 for a stable dev URL.
 echo ==^> serving http://127.0.0.1:8080 (Ctrl-C to stop)
-.\churn.exe serve --data workspace --listen 127.0.0.1:8080 %*
+.\churn.exe serve --data workspace --listen 127.0.0.1:8080 --no-open %*
 exit /b %errorlevel%

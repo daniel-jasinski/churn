@@ -13,29 +13,35 @@ vocabulary, not schema. The full specification is [DESIGN.md](DESIGN.md).
 ```
 go build ./cmd/churn                 # produces churn / churn.exe
 churn seed-demo --data ./demo        # a realistic two-project demo workspace
-churn serve --data ./demo            # http://127.0.0.1:8080
+churn serve --data ./demo            # serves + opens the UI in your browser
 ```
 
-Open the printed address in a browser: ready board, graph view, resource
-board, bottleneck dashboard, hierarchy view, vocabulary manager, bulk table
-editor, and per-entity history are all served from the binary (the frontend
-is embedded; there is no CDN and no network dependency, ever).
+`serve` prints the address and opens it in your browser (pass `--no-open`
+to skip). Everything is served from the one binary: ready board, graph
+view, resource board, bottleneck dashboard, hierarchy view, vocabulary
+manager, bulk table editor, and per-entity history — the frontend is
+embedded, with no CDN and no network dependency, ever.
 
-For a real workspace, point `--data` at any directory you want the event
-log to live in; it is created on first `serve`.
+The workspace directory is `--data`, or the `CHURN_DATA` environment
+variable, or the current directory — in that order. So inside a workspace
+you can just run `churn serve`. It is created on first `serve`. The port is
+`--port`, or `CHURN_PORT`, or a default of `24876`; `--listen host:port`
+gives full control of the bind address.
 
 ## CLI
 
 | command | what it does |
 |---|---|
-| `churn serve --data <dir> [--listen 127.0.0.1:8080] [--actor <name>] [--verbose]` | run the workspace server (lock, replay, writer, HTTP API + UI) |
-| `churn export-log --data <dir> [--out <file>]` | stream the event log as canonical JSONL (works against a live server) |
-| `churn import-log --data <dir> <file\|->` | restore a JSONL log into an **empty** data directory, re-validating every batch |
-| `churn backup --data <dir> <dest.db>` | consistent online snapshot via SQLite backup (works against a live server) |
-| `churn reindex --data <dir>` | rebuild the derived `event_refs` side table |
-| `churn seed-demo --data <dir>` | create a demo workspace in an empty directory |
+| `churn serve [--data <dir>] [--port <n>] [--listen <addr>] [--actor <name>] [--no-open] [--verbose]` | run the workspace server (lock, replay, writer, HTTP API + UI) and open the UI |
+| `churn export-log [--data <dir>] [--out <file>]` | stream the event log as canonical JSONL (works against a live server) |
+| `churn import-log [--data <dir>] <file\|->` | restore a JSONL log into an **empty** data directory, re-validating every batch |
+| `churn backup [--data <dir>] <dest.db>` | consistent online snapshot via SQLite backup (works against a live server) |
+| `churn reindex [--data <dir>]` | rebuild the derived `event_refs` side table |
+| `churn seed-demo [--data <dir>]` | create a demo workspace in an empty directory |
+| `churn version` | print version and build information |
 
-Run `churn <command> -h` for flags.
+`--data` defaults to `CHURN_DATA` then the current directory. Run
+`churn <command> -h` for flags.
 
 ## Backup and restore
 
