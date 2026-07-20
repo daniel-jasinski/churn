@@ -40,11 +40,14 @@ interface ViewState {
   selected: { kind: 'thing' | 'dep'; id: string } | null;
   zoom?: number;
   pan?: { x: number; y: number };
+  // root is kept so the module-level Escape handler can redraw without
+  // capturing a render's arguments in a listener that outlives it.
+  root: HTMLElement | null;
 }
 
 const vs: ViewState = {
   project: null, collapsed: new Set(), collapsedInit: false,
-  drawFrom: null, drawing: false, drawPreTo: null, selected: null,
+  drawFrom: null, drawing: false, drawPreTo: null, selected: null, root: null,
 };
 let cy: ReturnType<typeof cytoscape> | null = null;
 let lastGraph: Graph | null = null;
@@ -52,6 +55,7 @@ let lastGraph: Graph | null = null;
 // The workbench resolves the project before it ever calls in, so the graph
 // takes a concrete id — there is no "no project selected" state left to draw.
 export function renderGraph(root: HTMLElement, projectId: string): void {
+  vs.root = root;
   if (vs.project !== projectId) {
     vs.project = projectId;
     vs.collapsed = new Set();
@@ -59,6 +63,19 @@ export function renderGraph(root: HTMLElement, projectId: string): void {
     vs.selected = null;
     vs.zoom = undefined;
     vs.pan = undefined;
+    // Draw mode belongs to the project it was entered in: a half-finished
+    // edge names things the new graph does not have, and its toolbar would
+    // otherwise open already armed.
+    //
+    // Note this keys off the project id, NOT off root identity. The
+    // workbench allocates a fresh body element on every store notification
+    // — every commit over SSE, or every 10s while polling — so "root
+    // changed" means "something was committed", not "the view was
+    // remounted". Resetting on that would cancel a draw gesture the user is
+    // in the middle of.
+    vs.drawing = false;
+    vs.drawFrom = null;
+    vs.drawPreTo = null;
   }
 
   const hint = drawHint();
@@ -404,16 +421,27 @@ async function loadAndDraw(canvas: HTMLElement, panel: HTMLElement, projectId: s
   } else {
     panel.replaceChildren(defaultPanel(g));
   }
-
-  document.onkeydown = (e) => {
-    if (e.key === 'Escape' && vs.drawing) {
-      vs.drawing = false;
-      vs.drawFrom = null;
-      vs.drawPreTo = null;
-      renderGraph(root, projectId);
-    }
-  };
 }
+
+// Escape cancels edge-drawing. Registered once at module scope and reading
+// the live vs rather than a render's arguments: the previous per-render
+// `document.onkeydown =` pinned the LAST render's closure for the rest of
+// the session, so after navigating away from the graph with draw mode still
+// on, Escape redrew a stale project into a detached root. Reading vs means
+// the handler can never be older than the view it acts on.
+//
+// isConnected is the unmount test. No view tells the graph it is leaving —
+// they each replace the shell's children — so "am I still in the document?"
+// is the one signal that covers all of them: the board and tree tabs,
+// another project, and the top-level pages alike.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !vs.drawing || !vs.project) return;
+  if (!vs.root?.isConnected) return;
+  vs.drawing = false;
+  vs.drawFrom = null;
+  vs.drawPreTo = null;
+  renderGraph(vs.root, vs.project);
+});
 
 function cssEscape(s: string): string {
   return s.replace(/([^\w-])/g, '\\$1');
