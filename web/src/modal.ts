@@ -36,7 +36,24 @@ export function openModal(title: string, content: HTMLElement, opts: { wide?: bo
     class: 'overlay',
     onclick: (e: MouseEvent) => { if (e.target === overlay) closeTop(); },
   }, box);
-  overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTop(); });
+  // Escape is consumed, not just handled: it dismisses the dialog and
+  // nothing else. Without this it bubbles on to document, where the graph's
+  // cancel-edge-drawing listener sits — so closing a dialog opened while
+  // draw mode was armed would silently cancel the draw too, one keypress
+  // dismissing two things. A modal is modal; the key belongs to it.
+  //
+  // It closes the TOP of the stack, not necessarily this overlay — unlike
+  // the backdrop click below, which must only close the dialog it belongs
+  // to. Nothing traps focus, so Shift+Tab out of a stacked dialog's box
+  // lands on the overlay underneath (they are siblings under body, and the
+  // box is only tabIndex -1); Escape from there is still "close the dialog
+  // I am looking at". Deferring to closeTop would swallow the key and
+  // dismiss nothing.
+  overlay.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    closeModal();
+  });
   document.body.appendChild(overlay);
   stack.push(overlay);
   box.tabIndex = -1;
