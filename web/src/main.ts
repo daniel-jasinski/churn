@@ -1,13 +1,11 @@
 // main.ts — boot: layout shell, sidebar, routing, store wiring, keyboard
 // shortcuts.
 //
-// The shell is a left sidebar, a content pane, and a right inspector. The
-// sidebar is the single place selection happens: pick a project and the pane
-// becomes that project's workbench (graph / board / tree); pick a resource
-// and it opens in the inspector *beside* that workbench rather than
-// replacing it — "why is this blocked?" needs the resource and the graph on
-// screen at once. Between them sit the two screens that deliberately span
-// every project — ready work and bottlenecks — because contention is only
+// The shell is a left sidebar plus a content pane. The sidebar is the single
+// place selection happens: pick a project and the pane becomes that project's
+// workbench (graph / board / tree); pick a resource and the pane becomes that
+// resource. Between them sit the two screens that deliberately span every
+// project — ready work and bottlenecks — because contention is only
 // meaningful workspace-wide (DESIGN.md §3.3).
 
 import './styles.css';
@@ -17,7 +15,6 @@ import { current, href, navigate, onRoute, projectView, Route } from './router';
 import { store } from './store';
 import { openAsOfPicker } from './ui/asof';
 import { helpButton } from './ui/help';
-import { inspectedResource, mountInspector, renderInspector, setViewPanel, toggleResource } from './ui/inspector';
 import { openProjectEditor } from './ui/projectEditor';
 import { renderBottlenecks } from './views/bottlenecks';
 import { renderHistory } from './views/history';
@@ -46,19 +43,7 @@ const banner = h('div', { class: 'asof-banner', id: 'asof-banner' });
 const topbar = h('header', { class: 'topbar' });
 const sidebar = h('nav', { class: 'sidebar', id: 'sidebar' });
 const view = h('main', { class: 'view', id: 'view' });
-const inspector = h('aside', { class: 'inspector', id: 'inspector' });
-app.replaceChildren(topbar, banner, h('div', { class: 'shell' }, sidebar, view, inspector));
-// The inspector's own notify deliberately does NOT run render(): a panel
-// toggle changes only the sidebar highlight and the panel itself. Routing it
-// through render() would republish the graph's panel — destroying the
-// populated element, tearing down cytoscape and refetching the graph — so
-// closing a resource would reveal an empty panel instead of the node details
-// that were behind it.
-mountInspector(inspector, () => {
-  if (!store.loaded) return;
-  renderSidebar(current());
-  renderInspector();
-});
+app.replaceChildren(topbar, banner, h('div', { class: 'shell' }, sidebar, view));
 
 function renderTopbar(): void {
   const r = current();
@@ -82,36 +67,24 @@ function renderTopbar(): void {
         }, glyph))));
 }
 
-/** sideLink is every sidebar row. A row that changes the URL is an anchor,
- * so the browser keeps middle-click and the address bar; a row that only
- * opens the inspector is a button, because it goes nowhere. */
+/** sideLink is every sidebar row: an anchor so the browser handles
+ * middle-click, focus and the address bar, never a click handler. */
 function sideLink(opts: {
+  to: string;
   label: string;
   active: boolean;
-  to?: string;
-  onclick?: () => void;
-  pressed?: boolean;
-  data?: string;
   glyph?: string;
   count?: string | null;
   title?: string;
 }): HTMLElement {
-  const attrs = {
+  return h('a', {
     class: 'side-item' + (opts.active ? ' active' : ''),
+    href: opts.to,
     title: opts.title ?? opts.label,
-    // A toggle's state has to be readable, not just visible: .active styling
-    // says nothing to a screen reader.
-    ...(opts.onclick ? { 'aria-pressed': opts.pressed ? 'true' : 'false' } : {}),
-    ...(opts.data ? { dataset: { resource: opts.data } } : {}),
-  };
-  const body = [
-    opts.glyph ? h('span', { class: 'side-glyph' }, opts.glyph) : null,
-    h('span', { class: 'side-name' }, opts.label),
-    opts.count ? h('span', { class: 'side-count' }, opts.count) : null,
-  ];
-  return opts.to
-    ? h('a', { ...attrs, href: opts.to }, ...body)
-    : h('button', { ...attrs, onclick: opts.onclick }, ...body);
+  },
+  opts.glyph ? h('span', { class: 'side-glyph' }, opts.glyph) : null,
+  h('span', { class: 'side-name' }, opts.label),
+  opts.count ? h('span', { class: 'side-count' }, opts.count) : null);
 }
 
 function sideSection(label: string, ...body: (Node | null)[]): HTMLElement {
@@ -170,20 +143,15 @@ function renderSidebar(r: Route): void {
     active: r.name === 'resources' && !r.arg,
     title: 'The resource board — every resource, its queue and allocations (g s)',
   })];
-  const open = inspectedResource();
   for (const res of store.resources) {
     resourceRows.push(sideLink({
-      onclick: () => toggleResource(res.id),
-      pressed: open === res.id,
-      data: res.id,
+      to: href('resources', res.id),
       label: res.name,
       glyph: res.named ? '●' : '◍',
-      // Highlighted whether it is open in the inspector or focused on the
-      // board: both mean "this is the resource you are looking at".
-      active: open === res.id || (r.name === 'resources' && r.arg === res.id),
+      active: r.name === 'resources' && r.arg === res.id,
       count: res.available ? `${res.allocated}/${res.effective_capacity}` : '—',
       title: res.available
-        ? `${res.name} — ${res.allocated} of ${res.effective_capacity} allocated (opens beside the view)`
+        ? `${res.name} — ${res.allocated} of ${res.effective_capacity} allocated`
         : `${res.name} — unavailable${res.note ? `: ${res.note}` : ''}`,
     }));
   }
@@ -199,14 +167,7 @@ function renderSidebar(r: Route): void {
       }, '+')),
     ...resourceRows);
 
-  // replaceChildren destroys the row that was just activated, dropping focus
-  // to <body> — so a keyboard user could not press the same row twice to
-  // close what they opened. Put focus back on its replacement.
-  const focusedResource = (document.activeElement as HTMLElement | null)?.dataset?.['resource'];
   sidebar.replaceChildren(projects, workspace, resources);
-  if (focusedResource) {
-    sidebar.querySelector<HTMLElement>(`[data-resource="${CSS.escape(focusedResource)}"]`)?.focus();
-  }
 }
 
 function renderBanner(): void {
@@ -231,10 +192,6 @@ function render(): void {
     view.replaceChildren(h('div', { class: 'empty' }, 'Connecting to the workspace…'));
     return;
   }
-  // Drop the outgoing view's panel before the incoming view runs: only the
-  // graph publishes one, and leaving it behind would show a stale project's
-  // node details next to the board.
-  setViewPanel(null);
   renderSidebar(r);
   switch (r.name) {
     case 'project': renderProject(view, r.arg, r.arg2); break;
@@ -244,7 +201,6 @@ function render(): void {
     case 'history': renderHistory(view, r.arg); break;
     case 'settings': renderSettings(view, r.arg); break;
   }
-  renderInspector(); // a pinned resource stays live as the log advances
 }
 
 // keyboard: '/' focuses the filter, 'g' + letter navigates, 't' time travel
