@@ -1,0 +1,62 @@
+name: CI
+
+# The quality gate (scripts/gate.sh) on every push and pull request. Linux
+# runs the race detector — cgo is available there without the mingw-w64 setup
+# the Windows dev machine needs; Windows runs the same suite without -race so
+# the platform the binaries target still gets exercised.
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l cmd internal web/embed.go)"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            echo "gofmt found unformatted files" >&2
+            exit 1
+          fi
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test -race
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          CGO_ENABLED: 1
+        run: go test -race ./...
+
+      - name: go test
+        if: matrix.os == 'windows-latest'
+        run: go test ./...
+
+      # Pinned: .golangci.yml uses the v2 config schema, and the action major
+      # must match the linter major (v8 → golangci-lint v2).
+      - name: golangci-lint
+        if: matrix.os == 'ubuntu-latest'
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12.2

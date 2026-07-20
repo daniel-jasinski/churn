@@ -1,0 +1,68 @@
+name: Release
+
+# Publishes Windows binaries when a v* tag is pushed:
+#
+#   git tag -a v0.1.0 -m "churn v0.1.0" && git push origin v0.1.0
+#
+# The tag name is injected as main.version, so `churn version` reports the
+# release rather than "dev". Everything is pure Go (modernc.org/sqlite) and
+# web/dist is committed and embedded, so the build needs neither cgo nor a
+# Node toolchain and cross-compiles from Linux.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and publish (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          # Full history so the toolchain's VCS stamping records the commit.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # A tag should never ship code that cannot pass the gate. Race detection
+      # is left to CI; this is the fast confidence check on the exact tree.
+      - name: go test
+        run: go test ./...
+
+      - name: Build Windows binaries
+        env:
+          VERSION: ${{ github.event.inputs.tag || github.ref_name }}
+          GOOS: windows
+          CGO_ENABLED: 0
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            echo "==> churn_${VERSION}_windows_${arch}"
+            GOARCH="$arch" go build -trimpath \
+              -ldflags "-s -w -X main.version=${VERSION}" \
+              -o "dist/churn.exe" ./cmd/churn
+            (cd dist && zip -q "churn_${VERSION}_windows_${arch}.zip" churn.exe && rm churn.exe)
+          done
+          (cd dist && sha256sum *.zip > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$VERSION" \
+            --title "churn $VERSION" \
+            --generate-notes \
+            dist/*.zip dist/SHA256SUMS.txt
