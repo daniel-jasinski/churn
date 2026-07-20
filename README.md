@@ -33,15 +33,18 @@ gives full control of the bind address.
 | command | what it does |
 |---|---|
 | `churn serve [--data <dir>] [--port <n>] [--listen <addr>] [--actor <name>] [--no-open] [--verbose]` | run the workspace server (lock, replay, writer, HTTP API + UI) and open the UI |
-| `churn export-log [--data <dir>] [--out <file>]` | stream the event log as canonical JSONL (works against a live server) |
+| `churn ls [projects\|things\|resources] [--data <dir>] [--project <id>] [--json]` | list workspace contents as a table (or `--json`) from the terminal |
+| `churn export-log [--data <dir>] [file]` | stream the event log as canonical JSONL (works against a live server; `-`/omitted = stdout) |
 | `churn import-log [--data <dir>] <file\|->` | restore a JSONL log into an **empty** data directory, re-validating every batch |
 | `churn backup [--data <dir>] <dest.db>` | consistent online snapshot via SQLite backup (works against a live server) |
 | `churn reindex [--data <dir>]` | rebuild the derived `event_refs` side table |
 | `churn seed-demo [--data <dir>]` | create a demo workspace in an empty directory |
 | `churn version` | print version and build information |
 
-`--data` defaults to `CHURN_DATA` then the current directory. Run
-`churn <command> -h` for flags.
+`--data` defaults to `CHURN_DATA` then the current directory. `ls`, like
+`export-log` and `backup`, is read-only and works against a live server.
+Run `churn <command> -h` (or `churn help <command>`) for flags; a mistyped
+command suggests the nearest match.
 
 ## Backup and restore
 

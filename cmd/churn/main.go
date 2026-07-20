@@ -1,8 +1,9 @@
 // Command churn is the work dependency & resource tracker (DESIGN.md).
 //
-// One binary, seven subcommands:
+// One binary, eight subcommands:
 //
 //	serve       run the workspace server (lock, replay, writer, HTTP API)
+//	ls          list projects, things, or resources (read-only)
 //	export-log  stream the event log as canonical JSONL (§5.4)
 //	import-log  restore a JSONL log into an empty data directory (§5.4)
 //	backup      write an online, transactionally consistent snapshot
@@ -36,6 +37,7 @@ const usageText = `usage: churn <command> [flags]
 
 commands:
   serve       run the workspace server
+  ls          list projects, things, or resources
   export-log  stream the event log as canonical JSONL
   import-log  restore a JSONL log into an empty data directory
   backup      write a consistent online snapshot of the workspace database
@@ -72,6 +74,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	switch cmd {
 	case "serve":
 		return cmdServe(ctx, rest, stdout, stderr)
+	case "ls":
+		return cmdList(rest, stdout, stderr)
 	case "export-log":
 		return cmdExportLog(rest, stdout, stderr)
 	case "import-log":
@@ -86,12 +90,82 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		fmt.Fprintln(stdout, versionString())
 		return nil
 	case "help", "-h", "--help":
+		// `churn help <command>` shows that command's own usage.
+		if len(rest) > 0 && isCommand(rest[0]) {
+			return run(ctx, []string{rest[0], "-h"}, stdin, stdout, stderr)
+		}
 		fmt.Fprint(stdout, usageText)
 		return nil
 	default:
 		fmt.Fprint(stderr, usageText)
+		if s := suggestCommand(cmd); s != "" {
+			return fmt.Errorf("unknown command %q (did you mean %q?)", cmd, s)
+		}
 		return fmt.Errorf("unknown command %q", cmd)
 	}
+}
+
+// commandNames is the set of subcommands, for help routing and did-you-mean.
+var commandNames = []string{
+	"serve", "ls", "export-log", "import-log", "backup", "reindex",
+	"seed-demo", "version", "help",
+}
+
+func isCommand(name string) bool {
+	for _, c := range commandNames {
+		if c == name {
+			return true
+		}
+	}
+	return false
+}
+
+// suggestCommand returns the closest command name to a mistyped one, or "" if
+// none is close enough (edit distance within a third of the name's length, so
+// only genuine typos are suggested, never a wild guess).
+func suggestCommand(cmd string) string {
+	best, bestDist := "", 1<<30
+	for _, c := range commandNames {
+		if d := levenshtein(cmd, c); d < bestDist {
+			best, bestDist = c, d
+		}
+	}
+	if limit := (len(cmd) + 2) / 3; bestDist <= limit {
+		return best
+	}
+	return ""
+}
+
+// levenshtein is the classic edit distance (two-row DP), used only for the
+// typo suggestion above.
+func levenshtein(a, b string) int {
+	prev := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur := make([]int, len(b)+1)
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min3(cur[j-1]+1, prev[j]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(b)]
+}
+
+func min3(a, b, c int) int {
+	if b < a {
+		a = b
+	}
+	if c < a {
+		a = c
+	}
+	return a
 }
 
 // newFlagSet builds a subcommand FlagSet with a --data flag, the one flag

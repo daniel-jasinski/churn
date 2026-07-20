@@ -163,12 +163,25 @@ func defaultActor() string {
 // opens the workspace read-only, without the lock, so it works against a
 // live server (WAL snapshot: a consistent complete-batch prefix).
 func cmdExportLog(args []string, stdout, stderr io.Writer) error {
-	fs, data := newFlagSet("export-log", "export-log --data <dir> [--out <file>]", stderr)
-	out := fs.String("out", "", "output file (default: stdout)")
+	fs, data := newFlagSet("export-log", "export-log [--data <dir>] [file]", stderr)
+	out := fs.String("out", "", "output file (alias for the positional argument)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	dir := resolveDataDir(*data)
+
+	// The output path is the positional argument (consistent with backup and
+	// import-log); --out is a back-compat alias. "-" or omission means stdout.
+	outPath := *out
+	if fs.NArg() > 1 {
+		return errors.New("export-log takes at most one output file")
+	}
+	if fs.NArg() == 1 {
+		if *out != "" && *out != fs.Arg(0) {
+			return errors.New("export-log: give the output file once, as an argument OR --out, not both")
+		}
+		outPath = fs.Arg(0)
+	}
 
 	st, err := store.OpenReadOnly(dir)
 	if err != nil {
@@ -178,8 +191,8 @@ func cmdExportLog(args []string, stdout, stderr io.Writer) error {
 
 	dst := stdout
 	var f *os.File
-	if *out != "" {
-		if f, err = os.Create(*out); err != nil {
+	if outPath != "" && outPath != "-" {
+		if f, err = os.Create(outPath); err != nil {
 			return err
 		}
 		dst = f
@@ -194,7 +207,7 @@ func cmdExportLog(args []string, stdout, stderr io.Writer) error {
 			err = cerr
 		}
 		if err != nil {
-			_ = os.Remove(*out) // do not leave a truncated export behind
+			_ = os.Remove(outPath) // do not leave a truncated export behind
 		}
 	}
 	return err
