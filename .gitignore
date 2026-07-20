@@ -5,8 +5,11 @@
 churn.lock
 /workspace/
 
-# Build artifacts
+# Build artifacts — the compiled binary, plus the backup copies Windows leaves
+# behind when a running server holds the previous churn.exe open
+/churn
 /churn.exe
+/churn.exe~
 /dist/
 
 # Script outputs (scripts/backup.sh, scripts/export.sh)

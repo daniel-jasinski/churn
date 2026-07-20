@@ -71,6 +71,12 @@ code { font-family: ui-monospace, Consolas, monospace; }
 .live-on { color: var(--ok); }
 .live-off { color: var(--warn); }
 .spacer { flex: 1; }
+.gear {
+  padding: 2px 7px; border-radius: 6px; color: var(--muted);
+  font-size: 15px; line-height: 1.4; text-decoration: none;
+}
+.gear:hover { background: var(--bg3); color: var(--fg); text-decoration: none; }
+.gear.active { background: var(--bg3); color: var(--fg); }
 
 /* as-of banner */
 .asof-banner { display: none; }
@@ -314,6 +320,20 @@ input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 /* settings */
 .settings { max-width: 520px; }
 .formula { background: var(--bg3); padding: 10px 12px; border-radius: 8px; font-size: 12px; }
+
+/* settings shell — sub-nav for the configure-once sections */
+.settings-shell { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 20px; align-items: start; }
+.settings-nav { display: flex; flex-direction: column; gap: 2px; }
+.settings-nav h2 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.settings-nav a { padding: 5px 9px; border-radius: 6px; color: var(--fg); }
+.settings-nav a:hover { background: var(--bg3); text-decoration: none; }
+.settings-nav a.active { background: var(--bg3); font-weight: 600; }
+.settings-body { min-width: 0; }
+@media (max-width: 800px) {
+  .settings-shell { grid-template-columns: 1fr; gap: 12px; }
+  .settings-nav { flex-direction: row; flex-wrap: wrap; align-items: baseline; }
+  .settings-nav h2 { margin: 0 6px 0 0; }
+}
 
 /* bulk table */
 .bulk-table input, .bulk-table select { width: 100%; }

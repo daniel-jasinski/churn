@@ -14,8 +14,9 @@ import { renderReady } from './views/ready';
 import { renderResources } from './views/resources';
 import { renderSettings } from './views/settings';
 import { renderTree } from './views/tree';
-import { renderVocab } from './views/vocab';
 
+// The daily boards. Settings (weights + vocabulary) is deliberately absent:
+// it is configure-once, and rides the gear at the right instead.
 const NAV: [string, string, string][] = [
   ['ready', 'Ready', 'g r'],
   ['graph', 'Graph', 'g g'],
@@ -23,9 +24,7 @@ const NAV: [string, string, string][] = [
   ['resources', 'Resources', 'g s'],
   ['bottlenecks', 'Bottlenecks', 'g b'],
   ['tree', 'Tree', 'g t'],
-  ['vocab', 'Vocab', 'g v'],
   ['history', 'History', 'g h'],
-  ['settings', 'Weights', 'g w'],
 ];
 
 const app = document.getElementById('app')!;
@@ -52,7 +51,12 @@ function renderTopbar(): void {
     store.workspace
       ? h('span', { class: 'muted tiny', title: `workspace ${store.workspace.workspace_id}` },
         `seq ${store.workspace.last_seq}`)
-      : null);
+      : null,
+    h('a', {
+      href: '#/settings',
+      class: 'gear' + (r.name === 'settings' ? ' active' : ''),
+      title: 'Settings — weights (g w), vocabulary (g v)',
+    }, '⚙'));
 }
 
 function renderBanner(): void {
@@ -83,9 +87,8 @@ function render(): void {
     case 'resources': renderResources(view); break;
     case 'bottlenecks': renderBottlenecks(view); break;
     case 'tree': renderTree(view); break;
-    case 'vocab': renderVocab(view); break;
     case 'history': renderHistory(view, r.arg); break;
-    case 'settings': renderSettings(view); break;
+    case 'settings': renderSettings(view, r.arg); break;
   }
 }
 
@@ -101,12 +104,15 @@ document.addEventListener('keydown', (e) => {
   }
   if (gPending) {
     gPending = false;
-    const map: Record<string, string> = {
-      r: 'ready', g: 'graph', p: 'projects', s: 'resources',
-      b: 'bottlenecks', t: 'tree', v: 'vocab', h: 'history', w: 'settings',
+    // 'g v' and 'g w' predate the settings split; both still work, landing on
+    // the section they always did.
+    const map: Record<string, [string, string?]> = {
+      r: ['ready'], g: ['graph'], p: ['projects'], s: ['resources'],
+      b: ['bottlenecks'], t: ['tree'], h: ['history'],
+      v: ['settings', 'vocab'], w: ['settings'],
     };
     const dest = map[e.key];
-    if (dest) { e.preventDefault(); navigate(dest); }
+    if (dest) { e.preventDefault(); navigate(dest[0], dest[1]); }
     return;
   }
   if (e.key === 'g') { gPending = true; setTimeout(() => { gPending = false; }, 800); return; }

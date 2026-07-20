@@ -1,6 +1,11 @@
 // router.ts — hash-based routing: #/ready, #/graph/:projectId, #/projects,
-// #/resources, #/bottlenecks, #/tree, #/vocab, #/history/:entityId?,
-// #/settings.
+// #/resources, #/bottlenecks, #/tree, #/history/:entityId?,
+// #/settings/:section?.
+//
+// The low-frequency configuration screens live under #/settings: the
+// recommendation weights (default section) and the vocabulary manager
+// (#/settings/vocab). The pre-split #/vocab URL is still honored so old
+// bookmarks and links land on the right section.
 
 export interface Route {
   name: string;
@@ -13,8 +18,10 @@ export function parseHash(hash: string): Route {
   const arg = parts[1] ? decodeURIComponent(parts[1]) : undefined;
   switch (name) {
     case 'ready': case 'graph': case 'projects': case 'resources':
-    case 'bottlenecks': case 'tree': case 'vocab': case 'history': case 'settings':
+    case 'bottlenecks': case 'tree': case 'history': case 'settings':
       return { name, arg };
+    case 'vocab':
+      return { name: 'settings', arg: 'vocab' };
     default:
       return { name: 'ready' };
   }

@@ -32,7 +32,8 @@ export function renderReady(root: HTMLElement): void {
         'Then add things here (single or ', h('b', null, 'Bulk add'), '), declare resources on the ',
         h('a', { href: '#/resources' }, 'resource board'),
         ', and tune the vocabulary of states, types and capabilities under ',
-        h('a', { href: '#/vocab' }, 'Vocab'), '. Sensible default states are already in place.')));
+        h('a', { href: '#/settings/vocab' }, 'Settings → Vocabulary'),
+        '. Sensible default states are already in place.')));
     return;
   }
   const projFilter = () => store.selectedProject;

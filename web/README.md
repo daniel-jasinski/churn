@@ -41,8 +41,10 @@ src/main.ts        boot: shell, routing, store wiring, shortcuts
 src/api.ts         typed client — mirrors internal/server/dto.go by hand
 src/store.ts       cached snapshot; SSE refresh (debounced), 10s poll fallback
 src/router.ts      hash routes: #/ready #/graph/:id #/resources #/bottlenecks
-                   #/tree #/vocab #/history/:id? #/settings
-src/views/*.ts     one module per screen
+                   #/tree #/history/:id? #/settings/:section?
+                   (#/vocab is kept as an alias for #/settings/vocab)
+src/views/*.ts     one module per screen; views/settings.ts is a shell that
+                   hosts the configure-once sections (weights, vocab)
 src/ui/*.ts        shared pieces: transition/proposal flow, thing editor,
                    bulk add, §2.1 promotion conversion, as-of picker
 src/styles.css     dense, light+dark (prefers-color-scheme), system fonts
