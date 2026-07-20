@@ -37,6 +37,11 @@ a reviewer or a future reader cannot recover from the diff alone.
   distinct points.
 - Scope each commit to one logical change; commit per feature/milestone rather
   than dumping unrelated work together.
+- **Never** add a `Co-Authored-By` trailer — not for a model, not for a tool,
+  not for an agent. Authorship is already carried by the committer, and a
+  trailer naming a model is a false attribution the moment a different one does
+  the work. This is a hard rule: no exceptions, no variants (`Assisted-By`,
+  `Generated-With`, and the like are the same thing wearing a different key).
 
 ## Established patterns to preserve
 
