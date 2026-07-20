@@ -5,8 +5,9 @@ binary that keeps a project graph ("things" and the dependencies between
 them) and a shared resource pool in an append-only event log, and answers —
 at any moment — what is ready to work on, what is blocked and by what, where
 the bottlenecks are, and what to do next. It is deliberately
-ontology-minimal: states, thing types, and capability tags are user-defined
-vocabulary, not schema. The full specification is [DESIGN.md](DESIGN.md).
+ontology-minimal: states, thing types, resource types, and capability tags
+are user-defined vocabulary, not schema. The full specification is
+[DESIGN.md](DESIGN.md).
 
 ## Quickstart
 
@@ -135,8 +136,10 @@ in the read path.
 ## Status
 
 Phases 1 and 2 of the DESIGN.md evolution path are implemented: the
-event-sourced core, vocabulary, derived statuses, all analytics, allocation
-propose→confirm, atomic bulk editing, and the full web UI. Phase 3
+event-sourced core; the vocabulary of states, thing types, resource types,
+and capabilities (with optional typed metadata fields declared per type);
+derived statuses; all analytics; allocation propose→confirm; atomic bulk
+editing; free-text notes on things; and the full web UI. Phase 3
 (LAN/multi-user: sessions, server-stamped identity, CSRF hygiene) and phase
 4 (consumables, durations, calendars, log merging) are not built; the log
 format and API carry the seams they need (SSE refresh already works, and
