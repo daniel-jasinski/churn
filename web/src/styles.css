@@ -305,11 +305,24 @@ input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 @media (prefers-color-scheme: dark) { .tm-label { fill: #0f1115; } }
 
 /* vocab */
-.vocab-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
-@media (max-width: 1000px) { .vocab-cols { grid-template-columns: 1fr; } }
+/* Column counts must divide the four columns vocab.ts renders evenly — 4, 2,
+   1 — or the last one strands on a row of its own (a hardcoded 3 did exactly
+   that once resource types landed). auto-fit is no good here: it degrades
+   through 3. Keep these in step if a fifth column is ever added.
+   The breakpoints are viewport-width, so they allow for the ~220px the
+   settings sidebar and page padding take off the container. minmax(0, …)
+   rather than a bare 1fr so a long entry name cannot widen its own column at
+   the others' expense. */
+.vocab-cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 1180px) { .vocab-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .vocab-cols { grid-template-columns: minmax(0, 1fr); } }
 .vocab-col { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
 .vocab-list { list-style: none; padding: 0; margin: 8px 0; }
-.vocab-list li { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px dashed var(--border); }
+.vocab-list li { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px dashed var(--border); flex-wrap: wrap; }
+/* In a four-column layout a row can be narrower than its own content. Let the
+   whole span move to the next line rather than shrink and break mid-phrase
+   ("→ active" / "🔒 3 in it" are single units to a reader). */
+.vocab-list li > span { white-space: nowrap; }
 
 /* history */
 .hist { max-width: 760px; }
