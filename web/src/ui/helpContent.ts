@@ -302,6 +302,20 @@ export const HELP = {
       ['Required by (read-only)', 'items that wait for this one — edit those from their own editors.'],
     ],
   },
+  notes: {
+    title: 'Notes',
+    purpose: 'Free-text comments attached to a thing — a running commentary: why it stalled, what a reviewer asked for, a decision and its reason. Notes are plain annotations; they never change what is ready, blocked, or scheduled.',
+    how: [
+      'Type in the box and "Add note" to post. Unlike the rest of the editor, each note commits immediately — it does not wait for Save, and Cancel does not undo it.',
+      'Edit or delete your own wording freely; the original author and post time are kept, and an edit is timestamped.',
+      'Every note also appears in the thing’s History, interleaved with its other events, so the full story stays in one timeline.',
+    ],
+    components: [
+      ['Author · time', 'who posted the note and when — stamped by the server from the acting user, not typed.'],
+      ['edited …', 'shown once a note has been revised; the note keeps its original author and creation time.'],
+      ['Posts immediately', 'notes are their own facts in the log, so they are saved the moment you add them — deleting the thing later requires clearing its notes first.'],
+    ],
+  },
   resourceEditor: {
     title: 'Editing a resource',
     purpose: 'A resource is something work is done WITH — a person, a pool of interchangeable units, a room, an instrument. It is shared by every project in the workspace.',

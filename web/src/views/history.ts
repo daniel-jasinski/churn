@@ -104,9 +104,20 @@ function narrate(ev: EventEnvelope): (string | HTMLElement)[] {
     case 'allocation.opened': return ['allocated ', strong(nameOf(d['resource'])),
       ` ×${d['quantity']}`, ' to ', strong(nameOf(d['thing']))];
     case 'allocation.closed': return ['closed an allocation'];
+    case 'note.added': return ['noted on ', strong(nameOf(d['thing'])), ': ', noteExcerpt(d['body'])];
+    case 'note.superseded': return ['edited a note: ', noteExcerpt(d['body'])];
+    case 'note.retracted': return ['removed a note'];
     default:
       return [ev.type + ' ', h('code', { class: 'tiny' }, JSON.stringify(ev.data))];
   }
+}
+
+// noteExcerpt renders a note body as a short quoted snippet — a text node
+// (never innerHTML), so bodies stay inert.
+function noteExcerpt(body: unknown): HTMLElement {
+  const s = String(body ?? '');
+  const short = s.length > 80 ? s.slice(0, 80) + '…' : s;
+  return h('i', null, `“${short}”`);
 }
 
 function reqPhrase(d: Record<string, unknown>): string {

@@ -156,6 +156,20 @@ type Allocation struct {
 	RequirementVersion int64
 }
 
+// Note is a free-text annotation (a comment) attached to a thing. Author,
+// CreatedTS and CreatedSeq come from the adding event's envelope; EditedTS and
+// EditedSeq track the last supersession ("" / 0 while never edited). Notes are
+// plain facts — the engine derives nothing from them.
+type Note struct {
+	Thing      string
+	Body       string
+	Author     string
+	CreatedTS  string
+	CreatedSeq int64
+	EditedTS   string
+	EditedSeq  int64
+}
+
 // IsComposite reports whether the thing with the given id has children.
 // Unknown ids are not composite.
 func (p *Projection) IsComposite(id string) bool {
@@ -192,6 +206,19 @@ func (p *Projection) Leaves(id string) []string {
 	var out []string
 	for _, c := range sortedKeys(th.Children) {
 		out = append(out, p.Leaves(c)...)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// NotesOf returns the ids of notes attached to a thing, sorted. Note ids are
+// ULIDs, so ascending id order is chronological (oldest first).
+func (p *Projection) NotesOf(thing string) []string {
+	var out []string
+	for id, nt := range p.Notes {
+		if nt.Thing == thing {
+			out = append(out, id)
+		}
 	}
 	sort.Strings(out)
 	return out

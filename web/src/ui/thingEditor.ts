@@ -2,12 +2,14 @@
 // parent, metadata key-values, the requirements editor, and the
 // dependencies editor (outbound editable, inbound shown read-only).
 
-import { api, BatchOp, Dependency, Requirement, Thing } from '../api';
+import { api, ApiError, BatchOp, Dependency, Note, Requirement, Thing } from '../api';
 import { field, h, select } from '../dom';
+import { ts } from '../fmt';
 import { closeModal, openModal } from '../modal';
 import { store } from '../store';
 import { showError, toast } from '../toast';
 import { isPromotionRejection, offerPromotion } from './promotion';
+import { helpButton } from './help';
 import { metaForm } from './metaform';
 import { openProjectEditor } from './projectEditor';
 import { openCapabilityEditor, openTypeEditor } from '../views/vocab';
@@ -320,6 +322,7 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
         onclick: () => { reqRows.push({ removed: false, quantity: 1, pin: '', capabilities: [] }); renderReqRows(); },
       }, '+ requirement')),
     depsDetails(),
+    notesDetails(),
     h('div', { class: 'modal-actions' },
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
       h('button', { class: 'btn btn-primary', onclick: () => void save() }, isEdit ? 'Save' : 'Create')));
@@ -346,6 +349,83 @@ export function openThingEditor(existing?: Thing, preset: { project?: string; pa
           })))
         : null);
     return el;
+  }
+
+  // ── notes (§ comments): edit mode only; each action commits immediately,
+  // independent of the thing's atomic Save. A new thing has no id to attach
+  // notes to yet, so create mode shows a hint instead.
+  function notesDetails(): HTMLElement {
+    if (!existing) {
+      return h('details', { class: 'sub' },
+        h('summary', null, 'Notes', helpButton('notes')),
+        h('p', { class: 'muted tiny' }, 'Create the thing first, then reopen it to add notes.'));
+    }
+    const thingId = existing.id;
+    let cached: Note[] = [];
+    let editingId: string | null = null;
+    const list = h('div', { class: 'notes-list' });
+    const count = h('span', { class: 'muted tiny' }, '');
+    const addBox = h('textarea', { class: 'note-add', rows: '2', placeholder: 'Add a note…' }) as HTMLTextAreaElement;
+
+    const render = (): void => {
+      count.textContent = ` (${cached.length})`;
+      const rows = cached.map(noteRow);
+      list.replaceChildren(...(rows.length ? rows : [h('div', { class: 'muted tiny' }, 'No notes yet.')]));
+    };
+    const reload = async (): Promise<void> => {
+      try { cached = await api.notes(thingId); editingId = null; render(); }
+      catch (e) { showError(e); }
+    };
+    const add = async (): Promise<void> => {
+      const b = addBox.value.trim();
+      if (!b) { toast('Note is empty.', 'error'); return; }
+      try { await api.createNote({ thing: thingId, body: b }); addBox.value = ''; await reload(); }
+      catch (e) { showError(e); }
+    };
+
+    function noteRow(n: Note): HTMLElement {
+      if (editingId === n.id) {
+        const ta = h('textarea', { class: 'note-add', rows: '2' }) as HTMLTextAreaElement;
+        ta.value = n.body;
+        return h('article', { class: 'note note-editing' }, ta,
+          h('div', { class: 'note-actions' },
+            h('button', {
+              class: 'btn btn-sm btn-primary',
+              onclick: async () => {
+                const b = ta.value.trim();
+                if (!b) { toast('Note is empty.', 'error'); return; }
+                try { await api.updateNote(n.id, b, n.version); await reload(); }
+                catch (e) {
+                  showError(e);
+                  // A stale version means someone edited this note first: reload
+                  // so the fresh body/version replace the stale ones the retry
+                  // would keep failing against (makes "please retry" honest).
+                  if (e instanceof ApiError && e.kind === 'stale_version') await reload();
+                }
+              },
+            }, 'Save'),
+            h('button', { class: 'btn btn-sm', onclick: () => { editingId = null; render(); } }, 'Cancel')));
+      }
+      const edited = n.edited_ts ? ` · edited ${ts(n.edited_ts)}` : '';
+      return h('article', { class: 'note' },
+        h('div', { class: 'note-meta muted tiny' }, `${n.author} · ${ts(n.created_ts)}${edited}`),
+        h('div', { class: 'note-body' }, n.body),
+        h('div', { class: 'note-actions' },
+          h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { editingId = n.id; render(); } }, 'edit'),
+          h('button', {
+            class: 'btn btn-ghost btn-sm',
+            onclick: async () => { try { await api.deleteNote(n.id); await reload(); } catch (e) { showError(e); } },
+          }, 'delete')));
+    }
+
+    render();
+    void reload();
+    return h('details', { class: 'sub' },
+      h('summary', null, 'Notes', count, helpButton('notes')),
+      h('p', { class: 'muted tiny' }, 'Free-text comments on this thing. Each note posts immediately — independent of Save.'),
+      list,
+      h('div', { class: 'note-add-row' }, addBox,
+        h('button', { class: 'btn btn-sm btn-primary', onclick: () => void add() }, 'Add note')));
   }
 
   openModal(isEdit ? `Edit ${existing.name}` : 'New thing', body, { wide: true, help: 'thingEditor' });

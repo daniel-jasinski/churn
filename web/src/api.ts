@@ -84,6 +84,20 @@ export interface Resource {
   version: number;
 }
 
+/** Note is a free-text comment attached to a thing. author/created_* come
+ * from the adding event; edited_* are present only after an edit. */
+export interface Note {
+  id: string;
+  thing: string;
+  body: string;
+  author: string;
+  created_ts: string;
+  created_seq: number;
+  edited_ts?: string;
+  edited_seq?: number;
+  version: number;
+}
+
 export interface StateDef {
   id: string;
   name: string;
@@ -139,6 +153,7 @@ export interface WorkspaceCounts {
   types: number;
   resource_types: number;
   capabilities: number;
+  notes: number;
   open_allocations: number;
   closed_allocations: number;
 }
@@ -349,7 +364,7 @@ export interface TransitionResult {
 // each "$N" to the minted id.
 export interface BatchOp {
   op: 'create' | 'supersede' | 'retract' | 'transition' | 'availability' | 'grant' | 'revoke';
-  kind: 'project' | 'thing' | 'resource' | 'dependency' | 'requirement' | 'state' | 'type' | 'capability' | 'resource_type';
+  kind: 'project' | 'thing' | 'resource' | 'dependency' | 'requirement' | 'note' | 'state' | 'type' | 'capability' | 'resource_type';
   id?: string;
   data?: unknown;
 }
@@ -545,6 +560,12 @@ export const api = {
     req<Resource>('POST', `/resources/${id}/capabilities`, { capability }),
   revokeCapability: (id: string, capability: string) =>
     req<Resource>('DELETE', `/resources/${id}/capabilities/${capability}`),
+
+  notes: (thing: string) => get<Note[]>('/notes?thing=' + encodeURIComponent(thing)),
+  createNote: (data: { thing: string; body: string }) => req<Note>('POST', '/notes', data),
+  updateNote: (id: string, body: string, version?: number) =>
+    req<Note>('PATCH', `/notes/${id}`, { body }, ifMatch(version)),
+  deleteNote: (id: string) => req<unknown>('DELETE', `/notes/${id}`),
 
   createDependency: (data: { from: string; to: string; on_abandoned?: 'block' | 'ignore' }) =>
     req<Dependency>('POST', '/dependencies', data),

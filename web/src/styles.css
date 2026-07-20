@@ -342,6 +342,20 @@ input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 .cy-canvas.drawing { outline: 2px dashed var(--warn); cursor: crosshair; }
 .chip-new { border-style: dashed; color: var(--accent); }
 
+/* notes (comments on a thing) */
+.notes-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.note {
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px; background: var(--bg2);
+}
+.note-meta { margin-bottom: 2px; }
+.note-body { white-space: pre-wrap; word-break: break-word; }
+.note-actions { display: flex; gap: 4px; margin-top: 4px; }
+.note-add { width: 100%; resize: vertical; font: inherit; }
+.note-add-row { display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; }
+.note-add-row .note-add { flex: 1; }
+.note-editing { border-color: var(--accent); }
+
 /* declared metadata fields & fields editor */
 .meta-declared { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
 .meta-field { margin: 4px 0; }

@@ -58,6 +58,8 @@ type Projection struct {
 	Resources map[string]*Resource
 	// Allocations is keyed by al_ id and holds open and closed allocations.
 	Allocations map[string]*Allocation
+	// Notes is keyed by nt_ id: free-text annotations attached to things.
+	Notes map[string]*Note
 	// Versions maps entity id → seq of the last event whose entity column
 	// was that id — the per-entity version expected_versions checks against.
 	// Entries are never removed, even on retraction: Versions doubles as the
@@ -91,6 +93,7 @@ func NewProjection() *Projection {
 		Requirements:  map[string]*Requirement{},
 		Resources:     map[string]*Resource{},
 		Allocations:   map[string]*Allocation{},
+		Notes:         map[string]*Note{},
 		Versions:      map[string]int64{},
 		Statuses:      map[string]*ThingStatus{},
 	}
@@ -117,6 +120,7 @@ func (p *Projection) Clone() *Projection {
 	c.Requirements = cloneMap(p.Requirements, (*Requirement).clone)
 	c.Resources = cloneMap(p.Resources, (*Resource).clone)
 	c.Allocations = cloneMap(p.Allocations, clonePtr)
+	c.Notes = cloneMap(p.Notes, clonePtr)
 	c.Versions = cloneMap(p.Versions, func(v int64) int64 { return v })
 	c.Statuses = cloneMap(p.Statuses, (*ThingStatus).clone)
 	return &c
@@ -443,6 +447,28 @@ func (p *Projection) fold(ev event.Envelope, payload event.Payload) error {
 		}
 		al.Open = false
 		al.ClosedSeq = ev.Seq
+
+	case *event.NoteAdded:
+		if err := p.mustNotExist(id); err != nil {
+			return err
+		}
+		p.Notes[id] = &Note{
+			Thing: pl.Thing, Body: pl.Body, Author: ev.Actor,
+			CreatedTS: ev.TS, CreatedSeq: ev.Seq,
+		}
+	case *event.NoteSuperseded:
+		nt, ok := p.Notes[id]
+		if !ok {
+			return fmt.Errorf("note %s does not exist", id)
+		}
+		nt.Body = pl.Body
+		nt.EditedTS = ev.TS
+		nt.EditedSeq = ev.Seq
+	case *event.NoteRetracted:
+		if _, ok := p.Notes[id]; !ok {
+			return fmt.Errorf("note %s does not exist", id)
+		}
+		delete(p.Notes, id)
 
 	default:
 		// Every registered type must be handled; a decodable-but-unhandled

@@ -603,6 +603,7 @@ resource.created / .superseded / .retracted name, kind, named, capacity, type→
 resource.availability_changed               available, note
 capability.granted / .revoked               resource, capability→id
 allocation.opened / allocation.closed       thing, resource, quantity, requirement→id
+note.added / .superseded / .retracted       thing→id, body (author + ts from the envelope) — free-text comments
 ```
 
 Three verbs cover all change without ever rewriting a byte:

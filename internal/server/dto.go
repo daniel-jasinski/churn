@@ -100,6 +100,21 @@ type resourceDTO struct {
 	Version           int64 `json:"version"`
 }
 
+// noteDTO is a free-text note attached to a thing. author, created_ts and
+// created_seq come from the adding event; edited_ts/edited_seq are present
+// only once the note has been superseded.
+type noteDTO struct {
+	ID         string `json:"id"`
+	Thing      string `json:"thing"`
+	Body       string `json:"body"`
+	Author     string `json:"author"`
+	CreatedTS  string `json:"created_ts"`
+	CreatedSeq int64  `json:"created_seq"`
+	EditedTS   string `json:"edited_ts,omitempty"`
+	EditedSeq  int64  `json:"edited_seq,omitempty"`
+	Version    int64  `json:"version"`
+}
+
 type stateDTO struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -167,6 +182,7 @@ type workspaceCounts struct {
 	Types             int `json:"types"`
 	ResourceTypes     int `json:"resource_types"`
 	Capabilities      int `json:"capabilities"`
+	Notes             int `json:"notes"`
 	OpenAllocations   int `json:"open_allocations"`
 	ClosedAllocations int `json:"closed_allocations"`
 }
@@ -265,6 +281,15 @@ func buildResourceDTO(p *domain.Projection, id string) resourceDTO {
 		EffectiveCapacity: rs.EffectiveCapacity(), Allocated: allocated,
 		Free: free, OverAllocated: allocated > rs.EffectiveCapacity(),
 		Version: p.Version(id),
+	}
+}
+
+func buildNoteDTO(p *domain.Projection, id string) noteDTO {
+	nt := p.Notes[id]
+	return noteDTO{
+		ID: id, Thing: nt.Thing, Body: nt.Body, Author: nt.Author,
+		CreatedTS: nt.CreatedTS, CreatedSeq: nt.CreatedSeq,
+		EditedTS: nt.EditedTS, EditedSeq: nt.EditedSeq, Version: p.Version(id),
 	}
 }
 

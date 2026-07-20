@@ -32,6 +32,7 @@ const (
 	PrefixResourceType = "rt_"
 	PrefixResource     = "rs_"
 	PrefixAllocation   = "al_"
+	PrefixNote         = "nt_"
 )
 
 // The closed set of state semantics (DESIGN.md §2.2).
@@ -121,6 +122,10 @@ const (
 
 	TypeAllocationOpened = "allocation.opened"
 	TypeAllocationClosed = "allocation.closed"
+
+	TypeNoteAdded      = "note.added"
+	TypeNoteSuperseded = "note.superseded"
+	TypeNoteRetracted  = "note.retracted"
 )
 
 func init() {
@@ -159,6 +164,9 @@ func init() {
 	reg(TypeCapabilityRevoked, PrefixResource, func() Payload { return new(CapabilityRevoked) })
 	reg(TypeAllocationOpened, PrefixAllocation, func() Payload { return new(AllocationOpened) })
 	reg(TypeAllocationClosed, PrefixAllocation, func() Payload { return new(AllocationClosed) })
+	reg(TypeNoteAdded, PrefixNote, func() Payload { return new(NoteAdded) })
+	reg(TypeNoteSuperseded, PrefixNote, func() Payload { return new(NoteSuperseded) })
+	reg(TypeNoteRetracted, PrefixNote, func() Payload { return new(NoteRetracted) })
 }
 
 // checkID validates a required entity-id field: non-empty, correct typed
@@ -801,3 +809,51 @@ type AllocationClosed struct{}
 
 // Validate implements the payload contract.
 func (p *AllocationClosed) Validate() error { return nil }
+
+// ── notes ──
+
+// NoteAdded attaches a free-text note (a comment) to a thing (v1). Author and
+// timestamp are the envelope's actor and ts — the payload carries only the
+// target and the text. Notes are plain annotations: the engine computes
+// nothing from them.
+type NoteAdded struct {
+	Thing string `json:"thing"`
+	Body  string `json:"body"`
+}
+
+// Validate implements the payload contract.
+func (p *NoteAdded) Validate() error {
+	if err := checkID("thing", p.Thing, PrefixThing); err != nil {
+		return err
+	}
+	return requireBody(p.Body)
+}
+
+// Refs implements Referencer: a note references the thing it annotates, so a
+// note's creation surfaces in that thing's history via the event_refs side
+// table. Edits and retractions carry the note id, not the thing (like
+// requirement.superseded and allocation.closed), so they appear only in the
+// note's own timeline and workspace-wide activity.
+func (p *NoteAdded) Refs() []Ref { return []Ref{{p.Thing, "thing"}} }
+
+// NoteSuperseded replaces a note's text in full (v1); the target thing is
+// immutable.
+type NoteSuperseded struct {
+	Body string `json:"body"`
+}
+
+// Validate implements the payload contract.
+func (p *NoteSuperseded) Validate() error { return requireBody(p.Body) }
+
+// NoteRetracted tombstones a note (v1).
+type NoteRetracted struct{}
+
+// Validate implements the payload contract.
+func (p *NoteRetracted) Validate() error { return nil }
+
+func requireBody(body string) error {
+	if body == "" {
+		return fmt.Errorf("body must not be empty")
+	}
+	return nil
+}

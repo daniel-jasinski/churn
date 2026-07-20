@@ -306,6 +306,7 @@ func validateEvent(sim *Projection, ev event.Envelope, payload event.Payload) er
 			}
 		}
 		refs = append(refs, sim.OpenAllocationsOf(id)...)
+		refs = append(refs, sim.NotesOf(id)...)
 		if len(refs) > 0 {
 			sort.Strings(refs)
 			return errf(KindRetractionBlocked, refs,
@@ -490,6 +491,23 @@ func validateEvent(sim *Projection, ev event.Envelope, payload event.Payload) er
 		}
 		if !al.Open {
 			return errf(KindAllocation, []string{id}, "allocation %s is already closed", id)
+		}
+
+	case *event.NoteAdded:
+		if err := checkNewID(sim, id); err != nil {
+			return err
+		}
+		if _, ok := sim.Things[pl.Thing]; !ok {
+			return errf(KindUndefinedReference, []string{pl.Thing},
+				"note %s: thing %s does not exist", id, pl.Thing)
+		}
+	case *event.NoteSuperseded:
+		if _, ok := sim.Notes[id]; !ok {
+			return errf(KindUnknownEntity, []string{id}, "note %s does not exist", id)
+		}
+	case *event.NoteRetracted:
+		if _, ok := sim.Notes[id]; !ok {
+			return errf(KindUnknownEntity, []string{id}, "note %s does not exist", id)
 		}
 	}
 	return nil

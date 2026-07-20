@@ -256,6 +256,7 @@ func (s *Server) getWorkspace(rw http.ResponseWriter, _ *http.Request) {
 			Types:             len(p.Types),
 			ResourceTypes:     len(p.ResourceTypes),
 			Capabilities:      len(p.Capabilities),
+			Notes:             len(p.Notes),
 			OpenAllocations:   openAllocs,
 			ClosedAllocations: len(p.Allocations) - openAllocs,
 		},

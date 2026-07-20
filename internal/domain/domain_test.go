@@ -13,13 +13,19 @@ func env(seq int64, ts, typ, origin, data string) event.Envelope {
 }
 
 func envE(seq int64, ts, typ, origin, entity, data string) event.Envelope {
+	return envEA(seq, ts, typ, origin, "test", entity, data)
+}
+
+// envEA is envE with an explicit actor — for tests that assert the fold
+// captures the acting user (notes).
+func envEA(seq int64, ts, typ, origin, actor, entity, data string) event.Envelope {
 	return event.Envelope{
 		Seq:    seq,
 		ID:     ts + "-id", // uniqueness is the store's job; anything readable works here
 		Origin: origin,
 		Batch:  "b1",
 		TS:     ts,
-		Actor:  "test",
+		Actor:  actor,
 		Type:   typ,
 		V:      1,
 		Entity: entity,
@@ -35,8 +41,8 @@ const t0 = "2026-07-19T10:00:00.000Z"
 
 // fullLog is a foldable log touching every projection map: vocabulary, a
 // project, a parent/child pair, a third thing with a dependency, requirement,
-// resource with a granted capability, an active state, and an allocation.
-// (Fold does not run batch validation, so the sequence only has to be
+// resource with a granted capability, an active state, an allocation, and a
+// note. (Fold does not run batch validation, so the sequence only has to be
 // structurally sound.)
 func fullLog() []event.Envelope {
 	return []event.Envelope{
@@ -59,6 +65,7 @@ func fullLog() []event.Envelope {
 		envE(16, t0, event.TypeResourceTypeDefined, "wr_1", "rt_m",
 			`{"name":"machine","fields":[{"key":"room","kind":"select","options":["a","b"]}]}`),
 		envE(17, t0, event.TypeResourceSuperseded, "wr_1", "rs_r", `{"capacity":2,"kind":"reusable","name":"Reviewers","type":"rt_m"}`),
+		envE(18, t0, event.TypeNoteAdded, "wr_1", "nt_1", `{"thing":"th_x","body":"kickoff note"}`),
 	}
 }
 
@@ -266,6 +273,8 @@ func TestCloneIsIndependent(t *testing.T) {
 		{"Resources.Capabilities", func(c *Projection) { c.Resources["rs_r"].Capabilities["cap_mut"] = struct{}{} }},
 		{"Allocations map", func(c *Projection) { c.Allocations["al_new"] = &Allocation{} }},
 		{"Allocations entry", func(c *Projection) { c.Allocations["al_a"].Open = false }},
+		{"Notes map", func(c *Projection) { c.Notes["nt_new"] = &Note{} }},
+		{"Notes entry", func(c *Projection) { c.Notes["nt_1"].Body = "mutated" }},
 		{"Versions map", func(c *Projection) { c.Versions["th_x"] = 999 }},
 		{"Statuses map", func(c *Projection) { c.Statuses["th_new"] = &ThingStatus{} }},
 		{"Statuses entry", func(c *Projection) { c.Statuses["th_x"].Status = "mutated" }},

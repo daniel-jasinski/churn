@@ -67,6 +67,9 @@ var catalog = []struct {
 	{TypeCapabilityRevoked, PrefixResource, `{"capability":"cap_1"}`},
 	{TypeAllocationOpened, PrefixAllocation, `{"thing":"th_1","resource":"rs_1","quantity":1,"requirement":"req_1"}`},
 	{TypeAllocationClosed, PrefixAllocation, `{}`},
+	{TypeNoteAdded, PrefixNote, `{"thing":"th_1","body":"looks good"}`},
+	{TypeNoteSuperseded, PrefixNote, `{"body":"revised"}`},
+	{TypeNoteRetracted, PrefixNote, `{}`},
 }
 
 func TestCatalogRegistered(t *testing.T) {
@@ -184,6 +187,10 @@ func TestShapeRejections(t *testing.T) {
 		{"grant without capability", TypeCapabilityGranted, `{}`, "capability"},
 		{"allocation with zero quantity", TypeAllocationOpened, `{"thing":"th_1","resource":"rs_1","quantity":0,"requirement":"req_1"}`, "quantity"},
 		{"allocation without requirement", TypeAllocationOpened, `{"thing":"th_1","resource":"rs_1","quantity":1}`, "requirement"},
+		{"note without thing", TypeNoteAdded, `{"body":"x"}`, "thing"},
+		{"note with bad thing prefix", TypeNoteAdded, `{"thing":"pr_1","body":"x"}`, "prefix"},
+		{"note with empty body", TypeNoteAdded, `{"thing":"th_1"}`, "body"},
+		{"note superseded with empty body", TypeNoteSuperseded, `{}`, "body"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -226,6 +233,7 @@ func TestRefs(t *testing.T) {
 		{TypeCapabilityRevoked, `{"capability":"cap_1"}`, []Ref{{"cap_1", "capability"}}},
 		{TypeAllocationOpened, `{"thing":"th_1","resource":"rs_1","quantity":1,"requirement":"req_1"}`,
 			[]Ref{{"th_1", "thing"}, {"rs_1", "resource"}, {"req_1", "requirement"}}},
+		{TypeNoteAdded, `{"thing":"th_1","body":"x"}`, []Ref{{"th_1", "thing"}}},
 	}
 	for _, tc := range cases {
 		p, err := Decode(tc.typ, 1, []byte(tc.data))

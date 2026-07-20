@@ -155,6 +155,32 @@ func (s *Server) kinds() []kindSpec {
 			},
 		},
 		{
+			name: "note", path: "notes", prefix: event.PrefixNote,
+			createType: event.TypeNoteAdded, supersedeType: event.TypeNoteSuperseded,
+			retractType: event.TypeNoteRetracted,
+			newCreate:   func() event.Payload { return new(event.NoteAdded) },
+			newSupersede: func() event.Payload {
+				return new(event.NoteSuperseded)
+			},
+			retract: &event.NoteRetracted{},
+			exists: func(p *domain.Projection, id string) bool {
+				_, ok := p.Notes[id]
+				return ok
+			},
+			get: func(p *domain.Projection, id string) any { return buildNoteDTO(p, id) },
+			list: func(p *domain.Projection, r *http.Request) any {
+				thing := r.URL.Query().Get("thing")
+				out := make([]noteDTO, 0, len(p.Notes))
+				for _, id := range sortedKeys(p.Notes) {
+					if thing != "" && p.Notes[id].Thing != thing {
+						continue
+					}
+					out = append(out, buildNoteDTO(p, id))
+				}
+				return out
+			},
+		},
+		{
 			name: "state", path: "vocab/states", prefix: event.PrefixState,
 			createType: event.TypeStateDefined, supersedeType: event.TypeStateSuperseded,
 			retractType: event.TypeStateRetracted,
