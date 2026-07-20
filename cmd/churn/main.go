@@ -90,9 +90,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		fmt.Fprintln(stdout, versionString())
 		return nil
 	case "help", "-h", "--help":
-		// `churn help <command>` shows that command's own usage.
+		// `churn help <command>` shows that command's own usage. Explicitly
+		// requested help is redirect-friendly output: send it to stdout by
+		// giving the subcommand (whose usage prints to its error writer)
+		// stdout as both writers.
 		if len(rest) > 0 && isCommand(rest[0]) {
-			return run(ctx, []string{rest[0], "-h"}, stdin, stdout, stderr)
+			return run(ctx, []string{rest[0], "-h"}, stdin, stdout, stdout)
 		}
 		fmt.Fprint(stdout, usageText)
 		return nil

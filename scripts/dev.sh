@@ -18,7 +18,7 @@ else
   echo "==> reusing existing ./workspace"
 fi
 
-# --no-open: the dev workflow manages its own browser tab; pass --open or drop
-# the flag to have serve launch one. Pinned to :8080 for a stable dev URL.
+# --no-open: the dev workflow manages its own browser tab; drop --no-open to
+# have serve launch one. Pinned to :8080 for a stable dev URL.
 echo "==> serving http://127.0.0.1:8080 (Ctrl-C to stop)"
 exec ./churn.exe serve --data workspace --listen 127.0.0.1:8080 --no-open "$@"

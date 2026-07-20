@@ -139,7 +139,9 @@ func openBrowser(url string) {
 	default:
 		cmd = exec.Command("xdg-open", url)
 	}
-	_ = cmd.Start()
+	if err := cmd.Start(); err == nil {
+		go func() { _ = cmd.Wait() }() // reap the launcher so it never lingers defunct
+	}
 }
 
 // defaultActor is the fallback --actor value: the OS username (domain
@@ -191,8 +193,13 @@ func cmdExportLog(args []string, stdout, stderr io.Writer) error {
 
 	dst := stdout
 	var f *os.File
+	tmpPath := ""
 	if outPath != "" && outPath != "-" {
-		if f, err = os.Create(outPath); err != nil {
+		// Stage to a temp file and rename on success (the same discipline as
+		// import-log's .partial): a failed or interrupted export must never
+		// truncate or delete a file the user already had at outPath.
+		tmpPath = outPath + ".partial"
+		if f, err = os.Create(tmpPath); err != nil {
 			return err
 		}
 		dst = f
@@ -206,8 +213,11 @@ func cmdExportLog(args []string, stdout, stderr io.Writer) error {
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
+		if err == nil {
+			err = os.Rename(tmpPath, outPath) // atomic publish over any existing file
+		}
 		if err != nil {
-			_ = os.Remove(outPath) // do not leave a truncated export behind
+			_ = os.Remove(tmpPath) // discard the partial; the user's file is untouched
 		}
 	}
 	return err

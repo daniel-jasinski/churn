@@ -34,7 +34,7 @@ func cmdList(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("ls: unexpected argument %q (the kind goes first: ls %s …)", fs.Arg(0), fs.Arg(0))
+		return fmt.Errorf("ls: unexpected argument %q — the kind (projects, things, or resources) comes first, before any flags", fs.Arg(0))
 	}
 	dir := resolveDataDir(*data)
 
@@ -102,11 +102,12 @@ func listProjects(p *domain.Projection, w io.Writer, asJSON bool) error {
 func listThings(p *domain.Projection, project string, w io.Writer, asJSON bool) error {
 	derived := p.DeriveAll()
 	type row struct {
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Type    string `json:"type"`
-		Status  string `json:"status"`
-		Project string `json:"project"`
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		Type      string `json:"type"`
+		Status    string `json:"status"`
+		Composite bool   `json:"composite"`
+		Project   string `json:"project"`
 	}
 	rows := []row{}
 	for _, id := range sortedKeys(p.Things) {
@@ -114,19 +115,25 @@ func listThings(p *domain.Projection, project string, w io.Writer, asJSON bool) 
 		if project != "" && th.Project != project {
 			continue
 		}
-		status := string(derived[id].Status)
-		if len(th.Children) > 0 {
-			status += " (composite)"
-		}
-		rows = append(rows, row{id, th.Name, typeName(p, th.Type), status, projectName(p, th.Project)})
+		rows = append(rows, row{
+			ID: id, Name: th.Name, Type: typeName(p, th.Type),
+			Status: string(derived[id].Status), Composite: len(th.Children) > 0,
+			Project: projectName(p, th.Project),
+		})
 	}
 	if asJSON {
+		// Status stays clean (a bare status word); composite is its own field,
+		// so JSON consumers never have to parse "ready (composite)".
 		return writeJSONValue(w, rows)
 	}
 	tw := newTab(w)
 	fmt.Fprintln(tw, "ID\tNAME\tTYPE\tSTATUS\tPROJECT")
 	for _, r := range rows {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.ID, r.Name, r.Type, r.Status, r.Project)
+		status := r.Status
+		if r.Composite {
+			status += " (composite)"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.ID, r.Name, r.Type, status, r.Project)
 	}
 	return tw.Flush()
 }

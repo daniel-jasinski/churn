@@ -78,15 +78,16 @@ func TestListKindFirstParsing(t *testing.T) {
 }
 
 func TestHelpForCommand(t *testing.T) {
-	// `help <command>` shows that command's usage.
-	_, errOut, _ := runCLI(t, "help", "serve")
-	if !strings.Contains(errOut, "usage: churn serve") {
-		t.Fatalf("help serve: %q", errOut)
+	// `help <command>` shows that command's usage — on STDOUT, so it is
+	// redirect-friendly (churn help serve > out.txt is not empty).
+	out, errOut, _ := runCLI(t, "help", "serve")
+	if !strings.Contains(out, "usage: churn serve") {
+		t.Fatalf("help serve should print usage to stdout: stdout=%q stderr=%q", out, errOut)
 	}
 	// bare help prints the top-level usage to stdout.
-	out, err := func() (string, error) { o, _, e := runCLI(t, "help"); return o, e }()
-	if err != nil || !strings.Contains(out, "commands:") {
-		t.Fatalf("help: %v %q", err, out)
+	out2, _, err := runCLI(t, "help")
+	if err != nil || !strings.Contains(out2, "commands:") {
+		t.Fatalf("help: %v %q", err, out2)
 	}
 }
 
@@ -125,5 +126,25 @@ func TestExportPositionalPath(t *testing.T) {
 	// Passing both --out and a different positional is a conflict.
 	if _, _, err := runCLI(t, "export-log", "--data", dir, "--out", "a.jsonl", "b.jsonl"); err == nil {
 		t.Fatal("conflicting --out and positional must error")
+	}
+
+	// Exporting over an existing file replaces it atomically and leaves no
+	// .partial behind (staged-write discipline).
+	pre := filepath.Join(t.TempDir(), "existing.jsonl")
+	if err := os.WriteFile(pre, []byte("OLD CONTENT"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := runCLI(t, "export-log", "--data", dir, pre); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(pre)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "OLD CONTENT") || !strings.Contains(string(got), "log.initialized") {
+		t.Fatalf("overwrite export did not replace the file: %q", got)
+	}
+	if _, err := os.Stat(pre + ".partial"); !os.IsNotExist(err) {
+		t.Fatalf(".partial staging file was left behind")
 	}
 }
